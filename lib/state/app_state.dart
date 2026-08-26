@@ -207,16 +207,34 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Applies the theme change immediately (optimistic update) and syncs it
+  /// to Supabase in the background - awaiting the network round-trip first
+  /// (as every other AppState mutation does) makes a supposedly-instant
+  /// toggle feel laggy, since this now goes over the network instead of a
+  /// local database. Reverts quietly if the sync ends up failing.
   Future<void> updateThemePref(String themePref) async {
-    await _client.from('profiles').update({'theme_pref': themePref}).eq('id', currentProfile!.id);
+    final previous = currentProfile;
     currentProfile = currentProfile!.copyWith(themePref: themePref);
     notifyListeners();
+    try {
+      await _client.from('profiles').update({'theme_pref': themePref}).eq('id', currentProfile!.id);
+    } catch (_) {
+      currentProfile = previous;
+      notifyListeners();
+    }
   }
 
+  /// Same optimistic-update reasoning as [updateThemePref].
   Future<void> updateUnitPref(String unitPref) async {
-    await _client.from('profiles').update({'unit_pref': unitPref}).eq('id', currentProfile!.id);
+    final previous = currentProfile;
     currentProfile = currentProfile!.copyWith(unitPref: unitPref);
     notifyListeners();
+    try {
+      await _client.from('profiles').update({'unit_pref': unitPref}).eq('id', currentProfile!.id);
+    } catch (_) {
+      currentProfile = previous;
+      notifyListeners();
+    }
   }
 
   Future<void> updateBodyProfile({double? heightCm, double? goalWeightKg, bool clearGoal = false}) async {
