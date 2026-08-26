@@ -93,6 +93,19 @@ class AppState extends ChangeNotifier {
     familyMembers = rows.map((r) => Profile.fromMap(r)).toList();
   }
 
+  /// Re-fetches the family member list (there's no realtime subscription,
+  /// so this is how screens pick up someone else having joined/left since
+  /// this session started - call it on pull-to-refresh or tab entry).
+  Future<void> refreshFamilyMembers() async {
+    if (!(currentProfile?.isAdmin ?? false) || !(currentProfile?.inFamily ?? false)) {
+      familyMembers = [];
+      notifyListeners();
+      return;
+    }
+    await _loadFamilyMembers();
+    notifyListeners();
+  }
+
   // ---------------- Auth ----------------
 
   /// Returns null on success, or a user-facing error message.
@@ -174,6 +187,9 @@ class AppState extends ChangeNotifier {
     final row = await _client.from('profiles').select().eq('id', uid).single();
     currentProfile = Profile.fromMap(row, email: currentProfile?.email);
     await _loadFamilyInfo();
+    if (currentProfile!.isAdmin && currentProfile!.inFamily) {
+      await _loadFamilyMembers();
+    }
     notifyListeners();
   }
 

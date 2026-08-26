@@ -23,6 +23,12 @@ class AppColors {
   static const Color darkBackground = Color(0xFF000000);
   static const Color darkSurface = Color(0xFF1C1C1E);
   static const Color darkSurfaceAlt = Color(0xFF2C2C2E);
+
+  /// Distinct colors cycled through when plotting/labelling more than one
+  /// person at once (Histórico's family comparison chart and picker chips).
+  static const List<Color> series = [brand, hydrationAccent, fatAccent, goalAccent, negative, positive];
+
+  static Color seriesColor(int index) => series[index % series.length];
 }
 
 class AppTheme {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -138,6 +139,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               TextFormField(
                 controller: _weightCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
                 decoration: InputDecoration(labelText: 'Peso (${Units.label(_unitPref)})', prefixIcon: const Icon(Icons.monitor_weight_outlined)),
                 validator: (v) => _parse(v ?? '') == null ? 'Informe o peso' : null,
               ),
@@ -145,6 +147,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               TextFormField(
                 controller: _fatCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
                 decoration: const InputDecoration(labelText: 'Gordura corporal (%) - opcional', prefixIcon: Icon(Icons.pie_chart_outline)),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
@@ -158,6 +161,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               TextFormField(
                 controller: _hydrationCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
                 decoration: const InputDecoration(labelText: 'Hidratação (%) - opcional', prefixIcon: Icon(Icons.water_drop_outlined)),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;

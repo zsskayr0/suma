@@ -74,7 +74,11 @@ class DashboardScreen extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            WeightLineChart(entries: last30, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, lineColor: Theme.of(context).colorScheme.primary),
+                            WeightLineChart(
+                              series: [ChartSeries(label: user.name, color: Theme.of(context).colorScheme.primary, entries: last30)],
+                              unitPref: user.unitPref,
+                              goalWeightKg: user.goalWeightKg,
+                            ),
                           ],
                         ),
                       ),

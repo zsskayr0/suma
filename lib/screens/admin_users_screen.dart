@@ -21,6 +21,12 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _exportingAll = false;
 
+  @override
+  void initState() {
+    super.initState();
+    context.read<AppState>().refreshFamilyMembers();
+  }
+
   Future<void> _exportMember(Profile member) async {
     final appState = context.read<AppState>();
     final entries = await appState.entriesFor(member.id);

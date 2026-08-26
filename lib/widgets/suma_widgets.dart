@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
@@ -198,6 +199,7 @@ class _StepperFieldState extends State<StepperField> {
           controller: controller,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
           decoration: InputDecoration(suffixText: widget.unit),
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
