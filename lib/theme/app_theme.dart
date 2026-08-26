@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Central design tokens for Suma. The goal is a soft, rounded, "modern
 /// iOS/Notion" feel - big rounded cards with a faint shadow instead of
@@ -23,13 +24,14 @@ class AppColors {
   static const Color negative = Color(0xFFE5484D);
   static const Color goalAccent = green;
 
-  // Grouped background tones - light stays close to iOS system-gray;
-  // dark is tinted with the brand's near-black teal instead of true black.
+  // Grouped background tones - light stays close to iOS system-gray. Dark
+  // is true black with plain gray surfaces (no brand tint) so the palette
+  // reads purely through accents, not through the background itself.
   static const Color lightBackground = Color(0xFFF1F7F8);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color darkBackground = deepTeal;
-  static const Color darkSurface = Color(0xFF0E3839);
-  static const Color darkSurfaceAlt = Color(0xFF1A4547);
+  static const Color darkBackground = Color(0xFF000000);
+  static const Color darkSurface = Color(0xFF121212);
+  static const Color darkSurfaceAlt = Color(0xFF1E1E1E);
 
   /// Distinct colors cycled through when plotting/labelling more than one
   /// person at once (Histórico's family comparison chart and picker chips).
@@ -45,9 +47,18 @@ class AppTheme {
   static const double controlRadius = 16;
   static const double pillRadius = 100;
 
-  static ThemeData light() => _build(Brightness.light);
+  // Built once and reused - AppState.notifyListeners() fires often (every
+  // entry edit, family refresh, optimistic pref update), and MaterialApp
+  // re-reads `theme`/`darkTheme` on every rebuild it's part of. Rebuilding a
+  // full ColorScheme.fromSeed + text theme from scratch each time was a real,
+  // measurable jank source on Windows - these are static and never change at
+  // runtime, so compute them exactly once.
+  static final ThemeData _light = _build(Brightness.light);
+  static final ThemeData _dark = _build(Brightness.dark);
 
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData light() => _light;
+
+  static ThemeData dark() => _dark;
 
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
@@ -68,8 +79,9 @@ class AppTheme {
       // closer to an iOS/Notion tap than stock Android 12+.
       splashFactory: InkRipple.splashFactory,
       highlightColor: Colors.transparent,
-      textTheme: base.textTheme.apply(
-        fontSizeFactor: 1.0,
+      // Inter instead of the platform default (Roboto/Segoe) - a rounder,
+      // more "app-native" feel closer to the iOS/Notion reference look.
+      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
         bodyColor: scheme.onSurface,
         displayColor: scheme.onSurface,
       ),
@@ -91,7 +103,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? AppColors.darkSurfaceAlt : const Color(0xFFEFF6F7),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(controlRadius),
           borderSide: BorderSide.none,
@@ -111,14 +123,14 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(pillRadius)),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(52),
+          minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(pillRadius)),
           side: BorderSide(color: scheme.outlineVariant),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),

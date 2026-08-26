@@ -26,7 +26,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  // A bit smaller than the old 1280x720 default - that exactly matched (or
+  // exceeded) common laptop viewports with zero margin, so the window
+  // launched already touching the screen edges on smaller displays.
+  Win32Window::Size size(1120, 700);
   if (!window.Create(L"Suma", origin, size)) {
     return EXIT_FAILURE;
   }

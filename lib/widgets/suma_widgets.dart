@@ -17,7 +17,7 @@ class SumaCard extends StatelessWidget {
   const SumaCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding = const EdgeInsets.all(14),
     this.onTap,
     this.color,
   });
@@ -103,17 +103,17 @@ class StatTile extends StatelessWidget {
     if (trendPositive == false) valueColor = AppColors.negative;
 
     return SumaCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
             child: Icon(icon, color: color, size: 18),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             value,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, color: valueColor),
@@ -370,7 +370,7 @@ class ResponsiveBody extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
-  const ResponsiveBody({super.key, required this.child, this.padding = const EdgeInsets.fromLTRB(16, 8, 16, 96)});
+  const ResponsiveBody({super.key, required this.child, this.padding = const EdgeInsets.fromLTRB(14, 6, 14, 84)});
 
   @override
   Widget build(BuildContext context) {

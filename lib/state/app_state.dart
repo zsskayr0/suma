@@ -265,12 +265,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sets/changes/clears the weight goal. Setting or changing it re-anchors
-  /// [Profile.goalStartWeightKg] to the latest logged weight, so progress
-  /// tracking always starts fresh from "now" instead of from whatever the
-  /// oldest entry in the person's whole history happens to be.
+  /// Sets/changes/clears the weight goal. Only *creating* a goal (there
+  /// wasn't one before) re-anchors [Profile.goalStartWeightKg] to the latest
+  /// logged weight, so progress tracking starts fresh from "now" instead of
+  /// from whatever the oldest entry in the person's whole history happens to
+  /// be. Editing an existing goal (tweaking the target, switching
+  /// emagrecer/ganhar peso) keeps the original anchor - otherwise every
+  /// visit to "Meta de peso" would silently reset progress back to 0%.
   Future<void> updateGoal({double? goalWeightKg, String goalType = 'lose', bool clearGoal = false}) async {
-    final snapshot = clearGoal ? null : (entries.isNotEmpty ? entries.first.weightKg : currentProfile!.goalStartWeightKg);
+    final hadGoal = currentProfile!.goalWeightKg != null;
+    final snapshot = clearGoal
+        ? null
+        : (hadGoal ? (currentProfile!.goalStartWeightKg ?? _latestWeightOrNull()) : _latestWeightOrNull());
     await _client.from('profiles').update({
       'goal_weight_kg': clearGoal ? null : goalWeightKg,
       'goal_type': goalType,
@@ -284,6 +290,8 @@ class AppState extends ChangeNotifier {
     );
     notifyListeners();
   }
+
+  double? _latestWeightOrNull() => entries.isNotEmpty ? entries.first.weightKg : null;
 
   /// Removes a member from the current family (admin only) - their account
   /// and data are untouched, they just stop being part of the network.
@@ -372,5 +380,28 @@ class AppState extends ChangeNotifier {
   Future<List<WeightEntry>> entriesFor(String userId) async {
     final rows = await _client.from('weight_entries').select().eq('user_id', userId).order('date', ascending: false);
     return rows.map((r) => WeightEntry.fromMap(r)).toList();
+  }
+
+  /// How many family members logged an entry on each of the last [days] days
+  /// - the data behind the admin-only contribution heatmap on Hoje. One
+  /// query across every member (RLS already lets an admin read their whole
+  /// family's weight_entries) instead of one round-trip per person.
+  Future<Map<DateTime, int>> familyContributionCounts({int days = 126}) async {
+    if (familyMembers.isEmpty) return {};
+    final memberIds = familyMembers.map((m) => m.id).toList();
+    final since = DateTime.now().subtract(Duration(days: days));
+    final sinceDate = '${since.year.toString().padLeft(4, '0')}-${since.month.toString().padLeft(2, '0')}-${since.day.toString().padLeft(2, '0')}';
+    final rows = await _client
+        .from('weight_entries')
+        .select('date, user_id')
+        .inFilter('user_id', memberIds)
+        .gte('date', sinceDate);
+    final counts = <DateTime, int>{};
+    for (final r in rows) {
+      final d = DateTime.parse(r['date'] as String);
+      final key = DateTime(d.year, d.month, d.day);
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
   }
 }

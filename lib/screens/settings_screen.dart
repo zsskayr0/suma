@@ -407,36 +407,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final dataCard = SumaCard(
       padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          ListTile(
-            leading: _exporting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.file_download_outlined),
-            title: const Text('Exportar meus dados (CSV)'),
-            subtitle: const Text('Data, peso, gordura e hidratação'),
-            onTap: _exporting ? null : _exportMyData,
-          ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-          ListTile(
-            leading: _importing ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.file_upload_outlined),
-            title: const Text('Importar dados (CSV)'),
-            subtitle: const Text('Adiciona ao seu histórico - mesmo formato da exportação'),
-            onTap: _importing ? null : _importData,
-          ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-          ListTile(
-            leading: const Icon(Icons.password_outlined),
-            title: const Text('Alterar senha'),
-            onTap: _changePassword,
-          ),
-          if (user.isAdmin && family != null && widget.onOpenUsers != null) ...[
+      // ListTile paints its ink splash on the nearest Material ancestor -
+      // SumaCard's background is a plain DecoratedBox, so without this the
+      // tap ripple on each row below is silently invisible.
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            ListTile(
+              leading: _exporting ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.file_download_outlined),
+              title: const Text('Exportar meus dados (CSV)'),
+              subtitle: const Text('Data, peso, gordura e hidratação'),
+              onTap: _exporting ? null : _exportMyData,
+            ),
             const Divider(height: 1, indent: 16, endIndent: 16),
             ListTile(
-              leading: const Icon(Icons.group_outlined),
-              title: const Text('Ver membros da rede'),
-              onTap: widget.onOpenUsers,
+              leading: _importing ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.file_upload_outlined),
+              title: const Text('Importar dados (CSV)'),
+              subtitle: const Text('Adiciona ao seu histórico - mesmo formato da exportação'),
+              onTap: _importing ? null : _importData,
             ),
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              leading: const Icon(Icons.password_outlined),
+              title: const Text('Alterar senha'),
+              onTap: _changePassword,
+            ),
+            if (user.isAdmin && family != null && widget.onOpenUsers != null) ...[
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              ListTile(
+                leading: const Icon(Icons.group_outlined),
+                title: const Text('Ver membros da rede'),
+                onTap: widget.onOpenUsers,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
 

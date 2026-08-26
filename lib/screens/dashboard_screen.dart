@@ -6,8 +6,10 @@ import '../models/entry.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/bmi.dart';
+import '../utils/goal_trend.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../widgets/family_heatmap.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
 import 'entry_form_sheet.dart';
@@ -43,13 +45,9 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(width: 4),
         ],
       ),
-      floatingActionButton: entries.isEmpty
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => EntryFormSheet.show(context),
-              icon: const Icon(Icons.add),
-              label: const Text('Registrar peso'),
-            ),
+      // The "+" to register a weight only floats as a FAB in Histórico - here
+      // on Hoje it stays a small icon in the corner (see the appBar action
+      // above), so there's only one prominent "add" affordance per screen.
       body: entries.isEmpty
           ? const _EmptyDashboard()
           : ResponsiveBody(
@@ -59,8 +57,14 @@ class DashboardScreen extends StatelessWidget {
                   final heroColumn = Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _HeroCard(latest: latest!, previous: entries.length > 1 ? entries[1] : null, unitPref: user.unitPref),
-                      const SizedBox(height: 14),
+                      _HeroCard(
+                        latest: latest!,
+                        previous: entries.length > 1 ? entries[1] : null,
+                        unitPref: user.unitPref,
+                        goalWeightKg: user.goalWeightKg,
+                        goalType: user.goalType,
+                      ),
+                      const SizedBox(height: 10),
                       SumaCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +77,7 @@ class DashboardScreen extends StatelessWidget {
                                 TextButton(onPressed: onViewHistory, child: const Text('Ver histórico')),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             WeightLineChart(
                               series: [ChartSeries(label: user.name, color: Theme.of(context).colorScheme.primary, entries: last30)],
                               unitPref: user.unitPref,
@@ -90,7 +94,7 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       _BmiCard(bmi: bmi, heightMissing: user.heightCm == null),
                       if (user.goalWeightKg != null) ...[
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 10),
                         _GoalCard(
                           entries: entries,
                           goalWeightKg: user.goalWeightKg!,
@@ -104,8 +108,8 @@ class DashboardScreen extends StatelessWidget {
 
                   final statGrid = StatGrid(
                     children: [
-                      _deltaTile(context, entries: entries, days: 7, unitPref: user.unitPref),
-                      _deltaTile(context, entries: entries, days: 30, unitPref: user.unitPref),
+                      _deltaTile(context, entries: entries, days: 7, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
+                      _deltaTile(context, entries: entries, days: 30, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
                       StatTile(
                         icon: Icons.pie_chart_outline,
                         color: AppColors.fatAccent,
@@ -121,6 +125,8 @@ class DashboardScreen extends StatelessWidget {
                     ],
                   );
 
+                  final showHeatmap = user.isAdmin && appState.currentFamily != null && appState.familyMembers.length > 1;
+
                   if (wide) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -130,13 +136,14 @@ class DashboardScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Expanded(flex: 3, child: heroColumn),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 10),
                               Expanded(flex: 2, child: sideColumn),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 10),
                         statGrid,
+                        if (showHeatmap) ...[const SizedBox(height: 10), const FamilyHeatmap()],
                       ],
                     );
                   }
@@ -145,10 +152,11 @@ class DashboardScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       heroColumn,
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 10),
                       sideColumn,
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 10),
                       statGrid,
+                      if (showHeatmap) ...[const SizedBox(height: 10), const FamilyHeatmap()],
                     ],
                   );
                 },
@@ -157,7 +165,14 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _deltaTile(BuildContext context, {required List<WeightEntry> entries, required int days, required String unitPref}) {
+  Widget _deltaTile(
+    BuildContext context, {
+    required List<WeightEntry> entries,
+    required int days,
+    required String unitPref,
+    required double? goalWeightKg,
+    required String goalType,
+  }) {
     final latest = entries.first;
     final cutoff = latest.date.subtract(Duration(days: days));
     WeightEntry? reference;
@@ -176,12 +191,13 @@ class DashboardScreen extends StatelessWidget {
     final delta = Units.displayValue(deltaKg.abs(), unitPref);
     final losing = deltaKg < 0;
     final sign = deltaKg == 0 ? '' : (losing ? '-' : '+');
+    final positive = goalTrendPositive(fromKg: reference.weightKg, toKg: latest.weightKg, goalWeightKg: goalWeightKg, goalType: goalType);
     return StatTile(
       icon: losing ? Icons.trending_down_rounded : (deltaKg == 0 ? Icons.trending_flat_rounded : Icons.trending_up_rounded),
       color: Theme.of(context).colorScheme.primary,
       label: 'Variação em $days dias',
       value: '$sign${delta.toStringAsFixed(1)} ${Units.label(unitPref)}',
-      trendPositive: deltaKg == 0 ? null : losing,
+      trendPositive: positive,
     );
   }
 }
@@ -224,17 +240,19 @@ class _HeroCard extends StatelessWidget {
   final WeightEntry latest;
   final WeightEntry? previous;
   final String unitPref;
+  final double? goalWeightKg;
+  final String goalType;
 
-  const _HeroCard({required this.latest, required this.previous, required this.unitPref});
+  const _HeroCard({required this.latest, required this.previous, required this.unitPref, required this.goalWeightKg, required this.goalType});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final previousEntry = previous;
-    final deltaPill = previousEntry == null ? null : _buildDeltaPill(context, latest.weightKg - previousEntry.weightKg);
+    final deltaPill = previousEntry == null ? null : _buildDeltaPill(context, previousEntry.weightKg, latest.weightKg);
 
     return SumaCard(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -265,16 +283,18 @@ class _HeroCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDeltaPill(BuildContext context, double deltaKg) {
+  Widget _buildDeltaPill(BuildContext context, double fromKg, double toKg) {
     final scheme = Theme.of(context).colorScheme;
+    final deltaKg = toKg - fromKg;
     if (deltaKg == 0) {
       return Pill(text: '0 ${Units.label(unitPref)}', color: scheme.outline, icon: Icons.trending_flat_rounded);
     }
     final losing = deltaKg < 0;
     final sign = losing ? '-' : '+';
+    final positive = goalTrendPositive(fromKg: fromKg, toKg: toKg, goalWeightKg: goalWeightKg, goalType: goalType);
     return Pill(
       text: '$sign${Units.displayValue(deltaKg.abs(), unitPref).toStringAsFixed(1)} ${Units.label(unitPref)}',
-      color: losing ? AppColors.positive : AppColors.negative,
+      color: positive == false ? AppColors.negative : AppColors.positive,
       icon: losing ? Icons.trending_down_rounded : Icons.trending_up_rounded,
     );
   }
@@ -346,9 +366,15 @@ class _GoalCard extends StatelessWidget {
     final start = goalStartWeightKg ?? entries.last.weightKg;
     final totalDelta = goalWeightKg - start;
     final doneDelta = current - start;
-    final progress = totalDelta == 0 ? 1.0 : (doneDelta / totalDelta).clamp(0.0, 1.0).toDouble();
     final remainingKg = (goalWeightKg - current).abs();
     final reached = remainingKg < 0.05;
+    // When start and goal are (nearly) the same weight the ratio below is
+    // undefined - that's not automatically "100% done", it only means the
+    // goal was already met at the moment it was set. Treat it as complete
+    // only if the current weight is actually still at/near that goal;
+    // otherwise this is someone who has since drifted away from a goal that
+    // started as a no-op, and the bar should reflect that honestly.
+    final progress = totalDelta.abs() < 0.05 ? (reached ? 1.0 : 0.0) : (doneDelta / totalDelta).clamp(0.0, 1.0).toDouble();
     final verb = goalType == 'lose' ? 'emagrecer' : 'ganhar peso';
 
     return SumaCard(

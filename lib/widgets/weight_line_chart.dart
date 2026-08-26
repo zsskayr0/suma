@@ -74,29 +74,37 @@ class _WeightLineChartState extends State<WeightLineChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        GestureDetector(
-          onHorizontalDragStart: (d) => _setTouch(d.localPosition),
-          onHorizontalDragUpdate: (d) => _setTouch(d.localPosition),
-          onHorizontalDragEnd: (_) => _setTouch(null),
-          onHorizontalDragCancel: () => _setTouch(null),
-          onTapDown: (d) => _setTouch(d.localPosition),
-          onTapCancel: () => _setTouch(null),
-          onTapUp: (_) => Future.delayed(const Duration(seconds: 2), () => _setTouch(null)),
-          child: SizedBox(
-            height: widget.height,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _ChartPainter(
-                series: nonEmpty,
-                unitPref: widget.unitPref,
-                goalWeightKg: widget.goalWeightKg,
-                gridColor: scheme.outlineVariant.withValues(alpha: 0.4),
-                labelColor: scheme.onSurfaceVariant,
-                markerFill: scheme.surface,
-                singleSeriesFill: nonEmpty.length == 1,
-                touch: _touch,
-                tooltipBg: scheme.inverseSurface,
-                tooltipFg: scheme.onInverseSurface,
+        MouseRegion(
+          // Desktop/trackpad/pen: follow the pointer live without needing to
+          // click-drag first, like the reference dashboards. Touch devices
+          // still rely on the drag/tap handlers below (hover events aren't
+          // fired for touch input, so there's no double-handling).
+          onHover: (e) => _setTouch(e.localPosition),
+          onExit: (_) => _setTouch(null),
+          child: GestureDetector(
+            onHorizontalDragStart: (d) => _setTouch(d.localPosition),
+            onHorizontalDragUpdate: (d) => _setTouch(d.localPosition),
+            onHorizontalDragEnd: (_) => _setTouch(null),
+            onHorizontalDragCancel: () => _setTouch(null),
+            onTapDown: (d) => _setTouch(d.localPosition),
+            onTapCancel: () => _setTouch(null),
+            onTapUp: (_) => Future.delayed(const Duration(seconds: 2), () => _setTouch(null)),
+            child: SizedBox(
+              height: widget.height,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: _ChartPainter(
+                  series: nonEmpty,
+                  unitPref: widget.unitPref,
+                  goalWeightKg: widget.goalWeightKg,
+                  gridColor: scheme.outlineVariant.withValues(alpha: 0.4),
+                  labelColor: scheme.onSurfaceVariant,
+                  markerFill: scheme.surface,
+                  singleSeriesFill: nonEmpty.length == 1,
+                  touch: _touch,
+                  tooltipBg: scheme.inverseSurface,
+                  tooltipFg: scheme.onInverseSurface,
+                ),
               ),
             ),
           ),
@@ -219,7 +227,13 @@ class _ChartPainter extends CustomPainter {
         linePath.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
       }
 
-      if (singleSeriesFill && points.length > 1) {
+      // Every series gets its own soft gradient fill under its line, not
+      // just when it's the only one on the chart - comparing two family
+      // members used to make both go flat/lineless the moment a second
+      // person was added. Multiple overlapping fills read fine as long as
+      // each is faint enough not to muddy the others.
+      if (points.length > 1) {
+        final fillAlpha = singleSeriesFill ? 0.30 : 0.16;
         final areaPath = Path.from(linePath)
           ..lineTo(points.last.dx, topPad + chartHeight)
           ..lineTo(points.first.dx, topPad + chartHeight)
@@ -227,7 +241,7 @@ class _ChartPainter extends CustomPainter {
         final shader = ui.Gradient.linear(
           Offset(0, topPad),
           Offset(0, topPad + chartHeight),
-          [s.color.withValues(alpha: 0.30), s.color.withValues(alpha: 0.0)],
+          [s.color.withValues(alpha: fillAlpha), s.color.withValues(alpha: 0.0)],
         );
         canvas.drawPath(areaPath, Paint()..shader = shader);
       }

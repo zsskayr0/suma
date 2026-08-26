@@ -22,14 +22,23 @@ class SumaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => AppState()..bootstrap(),
-      child: Consumer<AppState>(
-        builder: (context, appState, _) {
+      // Selector instead of Consumer: AppState.notifyListeners() fires on
+      // nearly every interaction (entry edits, optimistic pref updates,
+      // family refreshes), and MaterialApp is an expensive thing to rebuild
+      // (it re-evaluates the whole navigator/theme setup). Scoping this to
+      // just the one field that actually needs to reach MaterialApp - the
+      // theme preference - means those other, far more frequent notifies
+      // only re-run the (cheap) screens that actually watch AppState
+      // themselves, instead of also rebuilding MaterialApp every time.
+      child: Selector<AppState, String?>(
+        selector: (_, appState) => appState.currentProfile?.themePref,
+        builder: (context, themePref, _) {
           return MaterialApp(
             title: 'Suma',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
-            themeMode: _themeModeFor(appState.currentProfile?.themePref),
+            themeMode: _themeModeFor(themePref),
             home: const _RootRouter(),
           );
         },

@@ -6,6 +6,7 @@ import '../models/entry.dart';
 import '../models/profile.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../utils/goal_trend.dart';
 import '../utils/units.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
@@ -25,7 +26,8 @@ class _Row {
   final WeightEntry entry;
   final Profile owner;
   final double? deltaKg;
-  const _Row({required this.entry, required this.owner, required this.deltaKg});
+  final double? previousWeightKg;
+  const _Row({required this.entry, required this.owner, required this.deltaKg, required this.previousWeightKg});
 }
 
 /// "Histórico" tab: every entry ever logged (the dashboard only shows the
@@ -85,9 +87,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return _othersEntries[id] ?? const [];
   }
 
-  double? _deltaAt(List<WeightEntry> descList, int index) {
+  double? _previousWeightAt(List<WeightEntry> descList, int index) {
     if (index + 1 >= descList.length) return null;
-    return descList[index].weightKg - descList[index + 1].weightKg;
+    return descList[index + 1].weightKg;
   }
 
   DateTime? get _cutoff => _filterDays == null ? null : DateTime.now().subtract(Duration(days: _filterDays!));
@@ -119,7 +121,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       for (var i = 0; i < full.length; i++) {
         final e = full[i];
         if (!_withinFilter(e.date)) continue;
-        rows.add(_Row(entry: e, owner: owner, deltaKg: _deltaAt(full, i)));
+        final previousWeightKg = _previousWeightAt(full, i);
+        rows.add(_Row(entry: e, owner: owner, deltaKg: previousWeightKg == null ? null : e.weightKg - previousWeightKg, previousWeightKg: previousWeightKg));
         filteredAsc.add(e);
       }
       if (filteredAsc.isNotEmpty) {
@@ -142,10 +145,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Histórico')),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => EntryFormSheet.show(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo registro'),
+        tooltip: 'Novo registro',
+        child: const Icon(Icons.add),
       ),
       body: !hasAnyData
           ? Center(
@@ -306,9 +309,16 @@ class _HistoryTile extends StatelessWidget {
                   Row(
                     children: [
                       Text(Units.formatWithUnit(entry.weightKg, unitPref), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      if (deltaKg != null) ...[
+                      if (deltaKg != null && row.previousWeightKg != null) ...[
                         const SizedBox(width: 8),
-                        _DeltaPill(deltaKg: deltaKg, unitPref: unitPref),
+                        _DeltaPill(
+                          deltaKg: deltaKg,
+                          unitPref: unitPref,
+                          previousWeightKg: row.previousWeightKg!,
+                          currentWeightKg: entry.weightKg,
+                          goalWeightKg: row.owner.goalWeightKg,
+                          goalType: row.owner.goalType,
+                        ),
                       ],
                     ],
                   ),
@@ -371,7 +381,19 @@ class _HistoryTile extends StatelessWidget {
 class _DeltaPill extends StatelessWidget {
   final double deltaKg;
   final String unitPref;
-  const _DeltaPill({required this.deltaKg, required this.unitPref});
+  final double previousWeightKg;
+  final double currentWeightKg;
+  final double? goalWeightKg;
+  final String goalType;
+
+  const _DeltaPill({
+    required this.deltaKg,
+    required this.unitPref,
+    required this.previousWeightKg,
+    required this.currentWeightKg,
+    required this.goalWeightKg,
+    required this.goalType,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -381,9 +403,10 @@ class _DeltaPill extends StatelessWidget {
     }
     final losing = deltaKg < 0;
     final sign = losing ? '-' : '+';
+    final positive = goalTrendPositive(fromKg: previousWeightKg, toKg: currentWeightKg, goalWeightKg: goalWeightKg, goalType: goalType);
     return Pill(
       text: '$sign${Units.displayValue(deltaKg.abs(), unitPref).toStringAsFixed(1)} ${Units.label(unitPref)}',
-      color: losing ? AppColors.positive : AppColors.negative,
+      color: positive == false ? AppColors.negative : AppColors.positive,
       icon: losing ? Icons.trending_down_rounded : Icons.trending_up_rounded,
     );
   }

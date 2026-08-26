@@ -7,6 +7,7 @@ import '../models/entry.dart';
 import '../state/app_state.dart';
 import '../utils/units.dart';
 import '../widgets/suma_date_picker.dart';
+import '../widgets/suma_floating_sheet.dart';
 
 /// Bottom sheet used both to add a new measurement and to edit an existing
 /// one (pass [existing] for the edit case). The weight field is shown in
@@ -18,9 +19,8 @@ class EntryFormSheet extends StatefulWidget {
   const EntryFormSheet({super.key, this.existing});
 
   static Future<void> show(BuildContext context, {WeightEntry? existing}) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
+    return showSumaFloatingSheet(
+      context,
       builder: (_) => EntryFormSheet(existing: existing),
     );
   }
