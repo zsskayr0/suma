@@ -153,6 +153,20 @@ class AppState extends ChangeNotifier {
     await _client.auth.signOut();
   }
 
+  /// Sends a password-reset e-mail. Returns null on success (Supabase
+  /// doesn't reveal whether the address is actually registered, so this is
+  /// "sent" either way) or a user-facing error message on an actual failure.
+  Future<String?> sendPasswordReset(String email) async {
+    try {
+      await _client.auth.resetPasswordForEmail(email.trim());
+      return null;
+    } on AuthException catch (e) {
+      return e.message;
+    } catch (e) {
+      return 'Não foi possível enviar o e-mail. Tente novamente.';
+    }
+  }
+
   /// Returns null on success, or a user-facing error message.
   Future<String?> changePassword(String newPassword) async {
     try {

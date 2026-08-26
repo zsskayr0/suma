@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../utils/responsive.dart';
+import '../widgets/auth_field_style.dart';
 import '../widgets/auth_gradient_panel.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
 /// First screen shown when nobody is signed in.
 ///
-/// Desktop-width windows show the full reference layout: the gradient hero
-/// panel and the login/signup form side by side, permanently - only the
-/// form panel's content swaps between the two, so the hero panel never
-/// remounts. Phone-width windows only have room for one at a time, so they
-/// show just the hero panel (with the entry buttons in place of the step
-/// preview) and push a standalone form screen when one is tapped.
+/// Phone-width windows show the gradient hero panel (with the entry
+/// buttons in place of the reference's step preview) and push a standalone
+/// login/signup card when one is tapped. Desktop-width windows skip the
+/// hero step and land straight on the same login card, centered on the
+/// page - there's room to just toggle between login/signup locally instead
+/// of a separate "choose" screen.
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -60,28 +61,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (Responsive.isDesktop(context)) {
       final isSignup = _desktopMode == _DesktopMode.signup;
       return Scaffold(
-        backgroundColor: const Color(0xFF04070C),
-        body: Row(
-          children: [
-            Expanded(
-              flex: 5,
-              child: AuthGradientPanel(mode: isSignup ? AuthPanelMode.signup : AuthPanelMode.login),
-            ),
-            Expanded(
-              flex: 4,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(40),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 380),
-                    child: isSignup
-                        ? SignupForm(onSwitchToLogin: () => setState(() => _desktopMode = _DesktopMode.login))
-                        : LoginForm(onSwitchToSignup: () => setState(() => _desktopMode = _DesktopMode.signup)),
-                  ),
-                ),
+        backgroundColor: authPageColor(context),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(40),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: AuthCard(
+                child: isSignup
+                    ? SignupForm(onSwitchToLogin: () => setState(() => _desktopMode = _DesktopMode.login))
+                    : LoginForm(onSwitchToSignup: () => setState(() => _desktopMode = _DesktopMode.signup)),
               ),
             ),
-          ],
+          ),
         ),
       );
     }

@@ -9,8 +9,8 @@ import '../widgets/auth_field_style.dart';
 /// Creates a brand-new Supabase account. Family linking ("criar minha rede"
 /// / "entrar com código") happens right after, as the first step of
 /// [OnboardingScreen] - this screen only handles identity. [SignupForm] is
-/// the reusable content (embedded in the desktop split view); [SignupScreen]
-/// wraps it as a standalone dark screen for mobile's pushed navigation.
+/// the reusable content (embedded directly on desktop); [SignupScreen] wraps
+/// it as a standalone screen for mobile's pushed navigation.
 class SignupScreen extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback? onSwitchToLogin;
@@ -19,10 +19,10 @@ class SignupScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF04070C),
+      backgroundColor: authPageColor(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        foregroundColor: authTextColor(context),
         elevation: 0,
         leading: BackButton(onPressed: onBack),
       ),
@@ -31,7 +31,7 @@ class SignupScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 400),
-            child: SignupForm(onBack: onBack, onSwitchToLogin: onSwitchToLogin),
+            child: AuthCard(child: SignupForm(onBack: onBack, onSwitchToLogin: onSwitchToLogin)),
           ),
         ),
       ),
@@ -50,10 +50,10 @@ class SignupForm extends StatefulWidget {
 
 class _SignupFormState extends State<SignupForm> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
   bool _obscure = true;
   bool _submitting = false;
   String? _error;
@@ -61,10 +61,10 @@ class _SignupFormState extends State<SignupForm> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
     super.dispose();
   }
 
@@ -74,8 +74,9 @@ class _SignupFormState extends State<SignupForm> {
       _submitting = true;
       _error = null;
     });
+    final name = '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'.trim();
     final result = await context.read<AppState>().signUp(
-          name: _nameCtrl.text,
+          name: name,
           email: _emailCtrl.text,
           password: _passwordCtrl.text,
         );
@@ -93,6 +94,8 @@ class _SignupFormState extends State<SignupForm> {
 
   @override
   Widget build(BuildContext context) {
+    final textColor = authTextColor(context);
+
     if (_awaitingEmailConfirmation) {
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -100,16 +103,16 @@ class _SignupFormState extends State<SignupForm> {
           Container(
             width: 88,
             height: 88,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.08)),
-            child: const Center(child: HeroIcon(HeroIcons.envelopeOpen, style: HeroIconStyle.outline, size: 38, color: Colors.white)),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: textColor.withValues(alpha: 0.06)),
+            child: Center(child: HeroIcon(HeroIcons.envelopeOpen, style: HeroIconStyle.outline, size: 38, color: textColor)),
           ),
           const SizedBox(height: 20),
-          const Text('Confirme seu e-mail', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
+          Text('Confirme seu e-mail', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(
             'Enviamos um link de confirmação para ${_emailCtrl.text.trim()}. Depois de confirmar, volte aqui e entre na sua conta.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13.5, height: 1.5),
+            style: TextStyle(color: authMutedTextColor(context), fontSize: 13.5, height: 1.5),
           ),
           const SizedBox(height: 24),
           FilledButton(onPressed: widget.onBack ?? widget.onSwitchToLogin, child: const Text('Voltar')),
@@ -123,52 +126,65 @@ class _SignupFormState extends State<SignupForm> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Criar conta', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700)),
+          Text('Criar conta', style: TextStyle(color: textColor, fontSize: 22, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
           const SizedBox(height: 4),
-          Text('Preencha seus dados para começar.', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13.5)),
-          const SizedBox(height: 28),
-          TextFormField(
-            controller: _nameCtrl,
-            style: authValueStyle,
-            cursorColor: Colors.white,
-            decoration: authFieldDecoration(label: 'Nome completo', icon: HeroIcons.userCircle),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+          Text('Preencha seus dados para criar sua conta.', style: TextStyle(color: authMutedTextColor(context), fontSize: 13), textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              const Expanded(child: AuthSocialButton.google()),
+              const SizedBox(width: 10),
+              const Expanded(child: AuthSocialButton.apple()),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const AuthOrDivider(text: 'Ou'),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: AuthLabeledField(
+                  label: 'Nome',
+                  controller: _firstNameCtrl,
+                  hint: 'ex: João',
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: AuthLabeledField(
+                  label: 'Sobrenome',
+                  controller: _lastNameCtrl,
+                  hint: 'ex: Silva',
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
-          TextFormField(
+          AuthLabeledField(
+            label: 'E-mail',
             controller: _emailCtrl,
-            style: authValueStyle,
-            cursorColor: Colors.white,
+            hint: 'ex: joao@gmail.com',
             keyboardType: TextInputType.emailAddress,
-            decoration: authFieldDecoration(label: 'E-mail', icon: HeroIcons.envelope),
             autocorrect: false,
             validator: (v) => (v == null || !v.contains('@')) ? 'Informe um e-mail válido' : null,
           ),
           const SizedBox(height: 14),
-          TextFormField(
+          AuthLabeledField(
+            label: 'Senha',
             controller: _passwordCtrl,
-            style: authValueStyle,
-            cursorColor: Colors.white,
+            hint: 'Digite sua senha',
             obscureText: _obscure,
-            decoration: authFieldDecoration(
-              label: 'Senha',
-              icon: HeroIcons.lockClosed,
-              suffixIcon: IconButton(
-                icon: HeroIcon(_obscure ? HeroIcons.eye : HeroIcons.eyeSlash, style: HeroIconStyle.outline, size: 18, color: Colors.white54),
-                onPressed: () => setState(() => _obscure = !_obscure),
-              ),
+            suffixIcon: IconButton(
+              icon: HeroIcon(_obscure ? HeroIcons.eye : HeroIcons.eyeSlash, style: HeroIconStyle.outline, size: 18, color: authMutedTextColor(context)),
+              onPressed: () => setState(() => _obscure = !_obscure),
             ),
-            validator: (v) => (v == null || v.length < 6) ? 'Mínimo de 6 caracteres' : null,
+            validator: (v) => (v == null || v.length < 8) ? 'Mínimo de 8 caracteres' : null,
           ),
-          const SizedBox(height: 14),
-          TextFormField(
-            controller: _confirmCtrl,
-            style: authValueStyle,
-            cursorColor: Colors.white,
-            obscureText: _obscure,
-            decoration: authFieldDecoration(label: 'Confirmar senha', icon: HeroIcons.lockClosed),
-            validator: (v) => (v != _passwordCtrl.text) ? 'As senhas não coincidem' : null,
-          ),
+          const SizedBox(height: 6),
+          Text('Deve ter pelo menos 8 caracteres.', style: TextStyle(color: authMutedTextColor(context), fontSize: 11.5)),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: const TextStyle(color: Color(0xFFE5484D), fontSize: 13)),
@@ -176,8 +192,12 @@ class _SignupFormState extends State<SignupForm> {
           const SizedBox(height: 22),
           FilledButton(
             onPressed: _submitting ? null : _submit,
+            style: FilledButton.styleFrom(
+              backgroundColor: isAuthDark(context) ? Colors.white : Colors.black,
+              foregroundColor: isAuthDark(context) ? Colors.black : Colors.white,
+            ),
             child: _submitting
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: isAuthDark(context) ? Colors.black : Colors.white))
                 : const Text('Criar conta'),
           ),
           if (widget.onSwitchToLogin != null) ...[
@@ -185,12 +205,12 @@ class _SignupFormState extends State<SignupForm> {
             Center(
               child: RichText(
                 text: TextSpan(
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13.5),
+                  style: TextStyle(color: authMutedTextColor(context), fontSize: 13.5),
                   children: [
                     const TextSpan(text: 'Já tem conta? '),
                     TextSpan(
                       text: 'Entrar',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
                       recognizer: (TapGestureRecognizer()..onTap = widget.onSwitchToLogin),
                     ),
                   ],
