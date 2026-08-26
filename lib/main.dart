@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
+import 'screens/app_intro_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/welcome_screen.dart';
@@ -71,11 +72,33 @@ class _RootRouter extends StatelessWidget {
       case AppPhase.loading:
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       case AppPhase.needsAuth:
-        return const WelcomeScreen();
+        return const _PreAuthFlow();
       case AppPhase.needsOnboarding:
         return const OnboardingScreen();
       case AppPhase.ready:
         return const HomeScreen();
     }
+  }
+}
+
+/// Shows the app-explainer intro once (skippable) before [WelcomeScreen] -
+/// local state rather than persisted, so it reappears each time someone
+/// signs all the way out, which is fine for how rarely that happens.
+class _PreAuthFlow extends StatefulWidget {
+  const _PreAuthFlow();
+
+  @override
+  State<_PreAuthFlow> createState() => _PreAuthFlowState();
+}
+
+class _PreAuthFlowState extends State<_PreAuthFlow> {
+  bool _introDone = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_introDone) {
+      return AppIntroScreen(onDone: () => setState(() => _introDone = true));
+    }
+    return const WelcomeScreen();
   }
 }

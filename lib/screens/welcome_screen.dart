@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../widgets/suma_mark.dart';
+import '../utils/responsive.dart';
+import '../widgets/auth_gradient_panel.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
-enum _AuthMode { welcome, login, signup }
-
-/// First screen shown when nobody is signed in: choose between signing into
-/// an existing account or creating a new one. Account creation and family
-/// linking ("criar minha rede" / "entrar com código") are two separate
-/// decisions - this screen only handles the former; the latter is offered
-/// during onboarding, right after a fresh sign-up.
+/// First screen shown when nobody is signed in.
 ///
-/// Login/signup are swapped in as plain widgets (no Navigator push) so that
-/// when [AppState] moves past `needsAuth`, `_RootRouter` can just swap this
-/// whole screen out - no pushed route left stranded on top of it.
+/// Desktop-width windows show the full reference layout: the gradient hero
+/// panel and the login/signup form side by side, permanently - only the
+/// form panel's content swaps between the two, so the hero panel never
+/// remounts. Phone-width windows only have room for one at a time, so they
+/// show just the hero panel (with the entry buttons in place of the step
+/// preview) and push a standalone form screen when one is tapped.
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -22,54 +20,78 @@ class WelcomeScreen extends StatefulWidget {
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
+enum _DesktopMode { login, signup }
+
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  _AuthMode _mode = _AuthMode.welcome;
+  _DesktopMode _desktopMode = _DesktopMode.login;
 
-  @override
-  Widget build(BuildContext context) {
-    switch (_mode) {
-      case _AuthMode.login:
-        return LoginScreen(onBack: () => setState(() => _mode = _AuthMode.welcome));
-      case _AuthMode.signup:
-        return SignupScreen(onBack: () => setState(() => _mode = _AuthMode.welcome));
-      case _AuthMode.welcome:
-        return _WelcomeBody(
-          onLogin: () => setState(() => _mode = _AuthMode.login),
-          onSignup: () => setState(() => _mode = _AuthMode.signup),
-        );
+  void _openLogin(BuildContext context) {
+    if (Responsive.isDesktop(context)) {
+      setState(() => _desktopMode = _DesktopMode.login);
+      return;
     }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (routeContext) => LoginScreen(
+        onBack: () => Navigator.of(routeContext).pop(),
+        onSwitchToSignup: () => Navigator.of(routeContext).pushReplacement(
+          MaterialPageRoute(builder: (c) => SignupScreen(onBack: () => Navigator.of(c).pop(), onSwitchToLogin: () => _openLogin(c))),
+        ),
+      ),
+    ));
   }
-}
 
-class _WelcomeBody extends StatelessWidget {
-  final VoidCallback onLogin;
-  final VoidCallback onSignup;
-  const _WelcomeBody({required this.onLogin, required this.onSignup});
+  void _openSignup(BuildContext context) {
+    if (Responsive.isDesktop(context)) {
+      setState(() => _desktopMode = _DesktopMode.signup);
+      return;
+    }
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (routeContext) => SignupScreen(
+        onBack: () => Navigator.of(routeContext).pop(),
+        onSwitchToLogin: () => Navigator.of(routeContext).pushReplacement(
+          MaterialPageRoute(builder: (c) => LoginScreen(onBack: () => Navigator.of(c).pop(), onSwitchToSignup: () => _openSignup(c))),
+        ),
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Center(child: SumaMark(size: 84)),
-                const SizedBox(height: 16),
-                Text('Suma', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-                Text('Monitoramento de peso para você e sua família', style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
-                const SizedBox(height: 40),
-                FilledButton(onPressed: onLogin, child: const Text('Entrar')),
-                const SizedBox(height: 12),
-                OutlinedButton(onPressed: onSignup, child: const Text('Criar conta')),
-              ],
+    if (Responsive.isDesktop(context)) {
+      final isSignup = _desktopMode == _DesktopMode.signup;
+      return Scaffold(
+        backgroundColor: const Color(0xFF04070C),
+        body: Row(
+          children: [
+            Expanded(
+              flex: 5,
+              child: AuthGradientPanel(mode: isSignup ? AuthPanelMode.signup : AuthPanelMode.login),
             ),
-          ),
+            Expanded(
+              flex: 4,
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(40),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: isSignup
+                        ? SignupForm(onSwitchToLogin: () => setState(() => _desktopMode = _DesktopMode.login))
+                        : LoginForm(onSwitchToSignup: () => setState(() => _desktopMode = _DesktopMode.signup)),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF04070C),
+      body: AuthGradientPanel(
+        mode: AuthPanelMode.welcome,
+        onLoginTap: () => _openLogin(context),
+        onSignupTap: () => _openSignup(context),
       ),
     );
   }
