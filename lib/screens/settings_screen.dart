@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../utils/qr_support.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../widgets/goal_editor.dart';
 import '../widgets/qr_code_dialog.dart';
 import '../widgets/suma_widgets.dart';
 import 'qr_scan_screen.dart';
@@ -103,16 +104,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Senha atualizada.')));
   }
 
-  Future<void> _editHeightAndGoal() async {
+  Future<void> _editHeight() async {
     final appState = context.read<AppState>();
     final user = appState.currentProfile!;
-    final result = await showModalBottomSheet<_ProfileEdit>(
+    final result = await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _EditProfileSheet(heightCm: user.heightCm ?? 170, goalWeightKg: user.goalWeightKg, unitPref: user.unitPref),
+      builder: (_) => _EditHeightSheet(heightCm: user.heightCm ?? 170),
     );
     if (result == null) return;
-    await appState.updateBodyProfile(heightCm: result.heightCm, goalWeightKg: result.goalWeightKg, clearGoal: result.goalWeightKg == null);
+    await appState.updateHeight(result);
+  }
+
+  Future<void> _editGoal() async {
+    final appState = context.read<AppState>();
+    final user = appState.currentProfile!;
+    final currentWeightKg = appState.entries.isNotEmpty ? appState.entries.first.weightKg : null;
+    final result = await showModalBottomSheet<_GoalEdit>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _EditGoalSheet(
+        hasGoal: user.goalWeightKg != null,
+        goalType: user.goalType,
+        goalWeightKg: user.goalWeightKg ?? (currentWeightKg ?? 70) - 5,
+        currentWeightKg: currentWeightKg,
+        heightCm: user.heightCm,
+        unitPref: user.unitPref,
+      ),
+    );
+    if (result == null) return;
+    await appState.updateGoal(goalWeightKg: result.hasGoal ? result.goalWeightKg : null, goalType: result.goalType, clearGoal: !result.hasGoal);
   }
 
   Future<void> _createFamily() async {
@@ -279,25 +300,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
-    final bodyCard = SumaCard(
-      onTap: _editHeightAndGoal,
+    final heightCard = SumaCard(
+      onTap: _editHeight,
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Altura e meta', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Altura', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 Text(
-                  user.heightCm != null ? '${user.heightCm!.toStringAsFixed(0)} cm' : 'Altura não definida',
+                  user.heightCm != null ? '${user.heightCm!.toStringAsFixed(0)} cm' : 'Não definida',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
+    );
+
+    final goalCard = SumaCard(
+      onTap: _editGoal,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Meta de peso', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
                 if (user.goalWeightKg != null)
                   Text(
-                    'Meta: ${Units.formatWithUnit(user.goalWeightKg!, user.unitPref)}',
+                    '${user.goalIsLose ? 'Emagrecer até' : 'Ganhar peso até'} ${Units.formatWithUnit(user.goalWeightKg!, user.unitPref)}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  ),
+                  )
+                else
+                  Text('Nenhuma meta definida', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
           ),
@@ -414,7 +455,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SectionLabel('Preferências'),
       preferencesCard,
       const SizedBox(height: 14),
-      bodyCard,
+      heightCard,
+      const SizedBox(height: 14),
+      goalCard,
       const SizedBox(height: 22),
       const SectionLabel('Dados & conta'),
       dataCard,
@@ -432,7 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [profileCard, const SizedBox(height: 14), familyCard, const SizedBox(height: 14), bodyCard])),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [profileCard, const SizedBox(height: 14), familyCard, const SizedBox(height: 14), heightCard, const SizedBox(height: 14), goalCard])),
                       const SizedBox(width: 14),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const SectionLabel('Preferências'), preferencesCard])),
                     ],
@@ -450,26 +493,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _ProfileEdit {
+class _EditHeightSheet extends StatefulWidget {
   final double heightCm;
-  final double? goalWeightKg;
-  const _ProfileEdit(this.heightCm, this.goalWeightKg);
-}
-
-class _EditProfileSheet extends StatefulWidget {
-  final double heightCm;
-  final double? goalWeightKg;
-  final String unitPref;
-  const _EditProfileSheet({required this.heightCm, required this.goalWeightKg, required this.unitPref});
+  const _EditHeightSheet({required this.heightCm});
 
   @override
-  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+  State<_EditHeightSheet> createState() => _EditHeightSheetState();
 }
 
-class _EditProfileSheetState extends State<_EditProfileSheet> {
+class _EditHeightSheetState extends State<_EditHeightSheet> {
   late double _heightCm = widget.heightCm;
-  late bool _hasGoal = widget.goalWeightKg != null;
-  late double _goalWeightKg = widget.goalWeightKg ?? widget.heightCm - 100;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Altura', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          SumaCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(text: _heightCm.toStringAsFixed(0), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
+                        TextSpan(text: ' cm', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ),
+                Slider(value: _heightCm, min: 100, max: 230, onChanged: (v) => setState(() => _heightCm = v)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(onPressed: () => Navigator.of(context).pop(_heightCm), child: const Text('Salvar')),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoalEdit {
+  final bool hasGoal;
+  final String goalType;
+  final double goalWeightKg;
+  const _GoalEdit({required this.hasGoal, required this.goalType, required this.goalWeightKg});
+}
+
+class _EditGoalSheet extends StatefulWidget {
+  final bool hasGoal;
+  final String goalType;
+  final double goalWeightKg;
+  final double? currentWeightKg;
+  final double? heightCm;
+  final String unitPref;
+
+  const _EditGoalSheet({
+    required this.hasGoal,
+    required this.goalType,
+    required this.goalWeightKg,
+    required this.currentWeightKg,
+    required this.heightCm,
+    required this.unitPref,
+  });
+
+  @override
+  State<_EditGoalSheet> createState() => _EditGoalSheetState();
+}
+
+class _EditGoalSheetState extends State<_EditGoalSheet> {
+  late bool _hasGoal = widget.hasGoal;
+  late String _goalType = widget.goalType;
+  late double _goalWeightKg = widget.goalWeightKg;
 
   @override
   Widget build(BuildContext context) {
@@ -480,51 +582,22 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Altura e meta', style: Theme.of(context).textTheme.titleLarge),
+            Text('Meta de peso', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            SumaCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Altura', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  Center(
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(text: _heightCm.toStringAsFixed(0), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-                          TextSpan(text: ' cm', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Slider(value: _heightCm, min: 100, max: 230, onChanged: (v) => setState(() => _heightCm = v)),
-                ],
-              ),
+            GoalEditor(
+              hasGoal: _hasGoal,
+              onHasGoalChanged: (v) => setState(() => _hasGoal = v),
+              goalType: _goalType,
+              onGoalTypeChanged: (v) => setState(() => _goalType = v),
+              goalWeightKg: _goalWeightKg,
+              onGoalWeightChanged: (v) => setState(() => _goalWeightKg = v),
+              currentWeightKg: widget.currentWeightKg,
+              heightCm: widget.heightCm,
+              unitPref: widget.unitPref,
             ),
-            const SizedBox(height: 14),
-            SumaCard(
-              child: Row(
-                children: [
-                  Expanded(child: Text('Definir meta de peso', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
-                  Switch(value: _hasGoal, onChanged: (v) => setState(() => _hasGoal = v)),
-                ],
-              ),
-            ),
-            if (_hasGoal) ...[
-              const SizedBox(height: 14),
-              StepperField(
-                label: 'Peso desejado',
-                value: Units.displayValue(_goalWeightKg, widget.unitPref),
-                unit: Units.label(widget.unitPref),
-                step: widget.unitPref == 'lb' ? 0.5 : 0.1,
-                min: Units.displayValue(20, widget.unitPref),
-                max: Units.displayValue(300, widget.unitPref),
-                onChanged: (v) => setState(() => _goalWeightKg = Units.toKg(v, widget.unitPref)),
-              ),
-            ],
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: () => Navigator.of(context).pop(_ProfileEdit(_heightCm, _hasGoal ? _goalWeightKg : null)),
+              onPressed: () => Navigator.of(context).pop(_GoalEdit(hasGoal: _hasGoal, goalType: _goalType, goalWeightKg: _goalWeightKg)),
               child: const Text('Salvar'),
             ),
           ],

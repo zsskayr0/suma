@@ -41,6 +41,8 @@ create table public.profiles (
   role text not null default 'admin' check (role in ('admin', 'member')),
   height_cm numeric,
   goal_weight_kg numeric,
+  goal_type text not null default 'lose' check (goal_type in ('lose', 'gain')),
+  goal_start_weight_kg numeric,
   unit_pref text not null default 'kg' check (unit_pref in ('kg', 'lb')),
   theme_pref text not null default 'system' check (theme_pref in ('system', 'light', 'dark')),
   onboarded boolean not null default false,
@@ -130,7 +132,7 @@ create policy "profiles_update_self"
 -- must only ever change through the SECURITY DEFINER RPCs below, which
 -- validate authorization properly.
 revoke update on public.profiles from authenticated;
-grant update (name, height_cm, goal_weight_kg, unit_pref, theme_pref, onboarded)
+grant update (name, height_cm, goal_weight_kg, goal_type, goal_start_weight_kg, unit_pref, theme_pref, onboarded)
   on public.profiles to authenticated;
 
 -- ---------------------------------------------------------------------

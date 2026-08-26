@@ -229,7 +229,7 @@ class _PeriodFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final options = <String, int?>{'7 dias': 7, '30 dias': 30, '90 dias': 90, 'Tudo': null};
+    final options = <String, int?>{'30 dias': 30, '90 dias': 90, '6 meses': 182, '1 ano': 365, 'Tudo': null};
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(

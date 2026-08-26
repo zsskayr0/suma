@@ -194,17 +194,21 @@ class AppState extends ChangeNotifier {
   }
 
   /// Completes the onboarding wizard: stores height/unit/theme preferences
-  /// and logs the very first weight entry in one go.
+  /// and logs the very first weight entry in one go. If a goal is set, the
+  /// just-entered weight becomes its starting point for progress tracking.
   Future<void> completeOnboarding({
     required double heightCm,
     required double initialWeightKg,
     double? goalWeightKg,
+    String goalType = 'lose',
     required String unitPref,
     required String themePref,
   }) async {
     await _client.from('profiles').update({
       'height_cm': heightCm,
       'goal_weight_kg': goalWeightKg,
+      'goal_type': goalType,
+      'goal_start_weight_kg': goalWeightKg == null ? null : initialWeightKg,
       'unit_pref': unitPref,
       'theme_pref': themePref,
       'onboarded': true,
@@ -214,6 +218,8 @@ class AppState extends ChangeNotifier {
       heightCm: heightCm,
       goalWeightKg: goalWeightKg,
       clearGoal: goalWeightKg == null,
+      goalType: goalType,
+      goalStartWeightKg: goalWeightKg == null ? null : initialWeightKg,
       unitPref: unitPref,
       themePref: themePref,
       onboarded: true,
@@ -253,12 +259,29 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> updateBodyProfile({double? heightCm, double? goalWeightKg, bool clearGoal = false}) async {
+  Future<void> updateHeight(double heightCm) async {
+    await _client.from('profiles').update({'height_cm': heightCm}).eq('id', currentProfile!.id);
+    currentProfile = currentProfile!.copyWith(heightCm: heightCm);
+    notifyListeners();
+  }
+
+  /// Sets/changes/clears the weight goal. Setting or changing it re-anchors
+  /// [Profile.goalStartWeightKg] to the latest logged weight, so progress
+  /// tracking always starts fresh from "now" instead of from whatever the
+  /// oldest entry in the person's whole history happens to be.
+  Future<void> updateGoal({double? goalWeightKg, String goalType = 'lose', bool clearGoal = false}) async {
+    final snapshot = clearGoal ? null : (entries.isNotEmpty ? entries.first.weightKg : currentProfile!.goalStartWeightKg);
     await _client.from('profiles').update({
-      if (heightCm != null) 'height_cm': heightCm,
       'goal_weight_kg': clearGoal ? null : goalWeightKg,
+      'goal_type': goalType,
+      'goal_start_weight_kg': snapshot,
     }).eq('id', currentProfile!.id);
-    currentProfile = currentProfile!.copyWith(heightCm: heightCm, goalWeightKg: goalWeightKg, clearGoal: clearGoal);
+    currentProfile = currentProfile!.copyWith(
+      goalWeightKg: goalWeightKg,
+      clearGoal: clearGoal,
+      goalType: goalType,
+      goalStartWeightKg: snapshot,
+    );
     notifyListeners();
   }
 

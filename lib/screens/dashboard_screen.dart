@@ -91,7 +91,13 @@ class DashboardScreen extends StatelessWidget {
                       _BmiCard(bmi: bmi, heightMissing: user.heightCm == null),
                       if (user.goalWeightKg != null) ...[
                         const SizedBox(height: 14),
-                        _GoalCard(entries: entries, goalWeightKg: user.goalWeightKg!, unitPref: user.unitPref),
+                        _GoalCard(
+                          entries: entries,
+                          goalWeightKg: user.goalWeightKg!,
+                          goalType: user.goalType,
+                          goalStartWeightKg: user.goalStartWeightKg,
+                          unitPref: user.unitPref,
+                        ),
                       ],
                     ],
                   );
@@ -319,20 +325,31 @@ class _BmiCard extends StatelessWidget {
 class _GoalCard extends StatelessWidget {
   final List<WeightEntry> entries; // date DESC
   final double goalWeightKg;
+  final String goalType; // 'lose' or 'gain'
+  final double? goalStartWeightKg;
   final String unitPref;
 
-  const _GoalCard({required this.entries, required this.goalWeightKg, required this.unitPref});
+  const _GoalCard({
+    required this.entries,
+    required this.goalWeightKg,
+    required this.goalType,
+    required this.goalStartWeightKg,
+    required this.unitPref,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final current = entries.first.weightKg;
-    final start = entries.last.weightKg;
+    // Progress since the goal was set - falls back to the oldest entry on
+    // file for goals set before that snapshot existed.
+    final start = goalStartWeightKg ?? entries.last.weightKg;
     final totalDelta = goalWeightKg - start;
     final doneDelta = current - start;
     final progress = totalDelta == 0 ? 1.0 : (doneDelta / totalDelta).clamp(0.0, 1.0).toDouble();
     final remainingKg = (goalWeightKg - current).abs();
     final reached = remainingKg < 0.05;
+    final verb = goalType == 'lose' ? 'emagrecer' : 'ganhar peso';
 
     return SumaCard(
       child: Column(
@@ -349,7 +366,7 @@ class _GoalCard extends StatelessWidget {
           GoalProgressBar(progress: progress, color: AppColors.goalAccent),
           const SizedBox(height: 8),
           Text(
-            reached ? 'Meta alcançada! 🎉' : 'Faltam ${Units.displayValue(remainingKg, unitPref).toStringAsFixed(1)} ${Units.label(unitPref)} · ${(progress * 100).toStringAsFixed(0)}% concluído',
+            reached ? 'Meta alcançada! 🎉' : 'Faltam ${Units.displayValue(remainingKg, unitPref).toStringAsFixed(1)} ${Units.label(unitPref)} para $verb · ${(progress * 100).toStringAsFixed(0)}% concluído',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],

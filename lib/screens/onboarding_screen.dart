@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../utils/bmi.dart';
 import '../utils/qr_support.dart';
 import '../utils/units.dart';
+import '../widgets/goal_editor.dart';
 import '../widgets/suma_widgets.dart';
 import 'qr_scan_screen.dart';
 
@@ -35,6 +36,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   double _weightKg = 70;
   bool _hasGoal = false;
   double _goalWeightKg = 65;
+  String _goalType = 'lose';
   String _themePref = 'system';
   bool _saving = false;
 
@@ -78,6 +80,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           heightCm: _heightCm,
           initialWeightKg: _weightKg,
           goalWeightKg: _hasGoal ? _goalWeightKg : null,
+          goalType: _goalType,
           unitPref: _unitPref,
           themePref: _themePref,
         );
@@ -142,10 +145,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       _GoalPage(
                         unitPref: _unitPref,
+                        heightCm: _heightCm,
                         hasGoal: _hasGoal,
+                        goalType: _goalType,
                         goalWeightKg: _goalWeightKg,
                         currentWeightKg: _weightKg,
                         onToggle: (v) => setState(() => _hasGoal = v),
+                        onGoalTypeChanged: (v) => setState(() => _goalType = v),
                         onGoalChanged: (v) => setState(() => _goalWeightKg = v),
                       ),
                       _ThemePage(themePref: _themePref, onChanged: _onThemeChanged),
@@ -588,18 +594,24 @@ class _HeightWeightPage extends StatelessWidget {
 
 class _GoalPage extends StatelessWidget {
   final String unitPref;
+  final double? heightCm;
   final bool hasGoal;
+  final String goalType;
   final double goalWeightKg;
   final double currentWeightKg;
   final ValueChanged<bool> onToggle;
+  final ValueChanged<String> onGoalTypeChanged;
   final ValueChanged<double> onGoalChanged;
 
   const _GoalPage({
     required this.unitPref,
+    required this.heightCm,
     required this.hasGoal,
+    required this.goalType,
     required this.goalWeightKg,
     required this.currentWeightKg,
     required this.onToggle,
+    required this.onGoalTypeChanged,
     required this.onGoalChanged,
   });
 
@@ -609,52 +621,24 @@ class _GoalPage extends StatelessWidget {
     return _OnboardingScaffold(
       icon: Icons.flag_outlined,
       title: 'Meta de peso',
-      subtitle: 'Opcional - defina um objetivo para acompanhar seu progresso no painel.',
+      subtitle: 'Opcional - defina um objetivo para acompanhar seu progresso no painel. Pode pular e decidir depois em Ajustes.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SumaCard(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Quero definir uma meta de peso', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Peso atual: ${Units.formatWithUnit(currentWeightKg, unitPref)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                Switch(value: hasGoal, onChanged: onToggle),
-              ],
-            ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('Peso atual: ${Units.formatWithUnit(currentWeightKg, unitPref)}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           ),
-          const SizedBox(height: 14),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: hasGoal
-                ? StepperField(
-                    key: const ValueKey('goal-on'),
-                    label: 'Peso desejado',
-                    value: Units.displayValue(goalWeightKg, unitPref),
-                    unit: Units.label(unitPref),
-                    step: unitPref == 'lb' ? 0.5 : 0.1,
-                    min: Units.displayValue(20, unitPref),
-                    max: Units.displayValue(300, unitPref),
-                    onChanged: (v) => onGoalChanged(Units.toKg(v, unitPref)),
-                  )
-                : Padding(
-                    key: const ValueKey('goal-off'),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Você pode ativar isso quando quiser, direto em Ajustes.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                    ),
-                  ),
+          GoalEditor(
+            hasGoal: hasGoal,
+            onHasGoalChanged: onToggle,
+            goalType: goalType,
+            onGoalTypeChanged: onGoalTypeChanged,
+            goalWeightKg: goalWeightKg,
+            onGoalWeightChanged: onGoalChanged,
+            currentWeightKg: currentWeightKg,
+            heightCm: heightCm,
+            unitPref: unitPref,
           ),
         ],
       ),

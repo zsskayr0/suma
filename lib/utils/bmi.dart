@@ -28,4 +28,13 @@ class Bmi {
     if (bmi < 30) return const Color(0xFFFF9F0A); // sobrepeso - laranja
     return const Color(0xFFFF453A); // obesidade - vermelho
   }
+
+  /// The "healthy" weight range (BMI 18.5-24.9) for someone of [heightCm] -
+  /// shown as a reference next to the goal weight editor. Null without a
+  /// height on file.
+  static (double min, double max)? idealWeightRangeKg(double? heightCm) {
+    if (heightCm == null || heightCm <= 0) return null;
+    final heightM = heightCm / 100;
+    return (18.5 * heightM * heightM, 24.9 * heightM * heightM);
+  }
 }

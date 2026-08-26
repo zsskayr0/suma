@@ -11,6 +11,8 @@ class Profile {
   final String role; // 'admin' or 'member'
   final double? heightCm;
   final double? goalWeightKg;
+  final String goalType; // 'lose' or 'gain'
+  final double? goalStartWeightKg; // snapshot of current weight when the goal was last set
   final String unitPref; // 'kg' or 'lb'
   final String themePref; // 'system', 'light' or 'dark'
   final bool onboarded;
@@ -24,6 +26,8 @@ class Profile {
     this.role = 'admin',
     this.heightCm,
     this.goalWeightKg,
+    this.goalType = 'lose',
+    this.goalStartWeightKg,
     this.unitPref = 'kg',
     this.themePref = 'system',
     this.onboarded = false,
@@ -32,6 +36,7 @@ class Profile {
 
   bool get isAdmin => role == 'admin';
   bool get inFamily => familyId != null;
+  bool get goalIsLose => goalType == 'lose';
   String get firstName => name.trim().isEmpty ? name : name.trim().split(RegExp(r'\s+')).first;
 
   Profile copyWith({
@@ -44,6 +49,8 @@ class Profile {
     bool clearHeight = false,
     double? goalWeightKg,
     bool clearGoal = false,
+    String? goalType,
+    double? goalStartWeightKg,
     String? unitPref,
     String? themePref,
     bool? onboarded,
@@ -56,6 +63,8 @@ class Profile {
       role: role ?? this.role,
       heightCm: clearHeight ? null : (heightCm ?? this.heightCm),
       goalWeightKg: clearGoal ? null : (goalWeightKg ?? this.goalWeightKg),
+      goalType: clearGoal ? this.goalType : (goalType ?? this.goalType),
+      goalStartWeightKg: clearGoal ? null : (goalStartWeightKg ?? this.goalStartWeightKg),
       unitPref: unitPref ?? this.unitPref,
       themePref: themePref ?? this.themePref,
       onboarded: onboarded ?? this.onboarded,
@@ -72,6 +81,8 @@ class Profile {
       role: map['role'] as String? ?? 'admin',
       heightCm: _toDouble(map['height_cm']),
       goalWeightKg: _toDouble(map['goal_weight_kg']),
+      goalType: map['goal_type'] as String? ?? 'lose',
+      goalStartWeightKg: _toDouble(map['goal_start_weight_kg']),
       unitPref: map['unit_pref'] as String? ?? 'kg',
       themePref: map['theme_pref'] as String? ?? 'system',
       onboarded: map['onboarded'] as bool? ?? false,
