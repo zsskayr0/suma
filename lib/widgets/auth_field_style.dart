@@ -106,7 +106,6 @@ class AuthCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: authCardColor(context),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: authBorderColor(context)),
       ),
       child: child,
     );
