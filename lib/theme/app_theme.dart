@@ -142,11 +142,16 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
+      // A solid, fully-saturated brand-cyan fill on the selected segment read
+      // as too heavy/loud for a control used this often (unit, theme,
+      // goal type) - a soft tinted fill with brand-colored text/icon instead
+      // is the same information at a calmer volume, closer to how iOS treats
+      // segmented controls.
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: SegmentedButton.styleFrom(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(pillRadius)),
-          selectedBackgroundColor: scheme.primary,
-          selectedForegroundColor: Colors.white,
+          selectedBackgroundColor: scheme.primary.withValues(alpha: 0.16),
+          selectedForegroundColor: scheme.primary,
         ),
       ),
       chipTheme: ChipThemeData(

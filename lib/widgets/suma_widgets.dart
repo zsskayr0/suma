@@ -32,8 +32,8 @@ class SumaCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.28 : 0.05),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -142,7 +142,7 @@ class StatGrid extends StatelessWidget {
       itemCount: children.length,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
-        mainAxisSpacing: 12,
+        mainAxisSpacing: 16,
         crossAxisSpacing: 12,
         childAspectRatio: 1.35,
       ),
@@ -349,13 +349,13 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(100)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[Icon(icon, size: 14, color: color), const SizedBox(width: 4)],
-          Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12.5)),
+          if (icon != null) ...[Icon(icon, size: 13, color: color), const SizedBox(width: 3)],
+          Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
         ],
       ),
     );
