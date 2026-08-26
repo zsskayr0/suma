@@ -262,10 +262,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(user.email ?? '', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                // Below the email, not squeezed into the same row as the name -
+                // a long name + this pill side by side had no room to breathe.
+                if (family != null) ...[
+                  const SizedBox(height: 8),
+                  Pill(text: user.isAdmin ? 'Admin da rede' : 'Membro', color: user.isAdmin ? AppColors.goalAccent : Theme.of(context).colorScheme.primary),
+                ],
               ],
             ),
           ),
-          if (family != null) Pill(text: user.isAdmin ? 'Admin da rede' : 'Membro', color: user.isAdmin ? AppColors.goalAccent : Theme.of(context).colorScheme.primary),
         ],
       ),
     );
@@ -287,15 +292,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 20),
           Text('Aparência', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'system', icon: Icon(Icons.smartphone_rounded), label: Text('Sistema')),
-              ButtonSegment(value: 'light', icon: Icon(Icons.light_mode_outlined), label: Text('Claro')),
-              ButtonSegment(value: 'dark', icon: Icon(Icons.dark_mode_outlined), label: Text('Escuro')),
-            ],
-            selected: {user.themePref},
-            onSelectionChanged: (s) => appState.updateThemePref(s.first),
-          ),
+          // A stacked list instead of a 3-way SegmentedButton - side by side,
+          // "Sistema"/"Escuro" didn't have room to stay on one line and wrapped
+          // mid-word inside their segment.
+          _ThemeOption(icon: Icons.smartphone_rounded, label: 'Sistema', value: 'system', selected: user.themePref, onSelected: appState.updateThemePref),
+          const SizedBox(height: 8),
+          _ThemeOption(icon: Icons.light_mode_outlined, label: 'Claro', value: 'light', selected: user.themePref, onSelected: appState.updateThemePref),
+          const SizedBox(height: 8),
+          _ThemeOption(icon: Icons.dark_mode_outlined, label: 'Escuro', value: 'dark', selected: user.themePref, onSelected: appState.updateThemePref),
         ],
       ),
     );
@@ -606,6 +610,49 @@ class _EditGoalSheetState extends State<_EditGoalSheet> {
               onPressed: () => Navigator.of(context).pop(_GoalEdit(hasGoal: _hasGoal, goalType: _goalType, goalWeightKg: _goalWeightKg)),
               child: const Text('Salvar'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of the "Aparência" list - a full-width tappable option instead of
+/// a segment sharing horizontal space with two others.
+class _ThemeOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  const _ThemeOption({required this.icon, required this.label, required this.value, required this.selected, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isSelected = value == selected;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => onSelected(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? scheme.primary.withValues(alpha: 0.14) : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isSelected ? scheme.primary.withValues(alpha: 0.4) : scheme.outlineVariant.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: isSelected ? scheme.primary : scheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, color: isSelected ? scheme.primary : scheme.onSurface),
+              ),
+            ),
+            if (isSelected) Icon(Icons.check_rounded, size: 18, color: scheme.primary),
           ],
         ),
       ),
