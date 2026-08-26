@@ -33,19 +33,13 @@ class DashboardScreen extends StatelessWidget {
     final cutoff = DateTime.now().subtract(const Duration(days: 30));
     final last30 = entries.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).toList().reversed.toList();
 
-    // Anchors the "+" popover to this exact button instead of the middle of
-    // the screen - a fresh key per build is fine, it's only ever read back
-    // by the onPressed closure created in this same build.
-    final addButtonKey = GlobalKey();
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Olá, ${user.firstName} 👋'),
         actions: [
           IconButton(
-            key: addButtonKey,
             tooltip: 'Novo registro',
-            onPressed: () => EntryFormSheet.show(context, anchorKey: addButtonKey),
+            onPressed: () => EntryFormSheet.show(context),
             icon: const Icon(Icons.add_circle_outline),
           ),
           const SizedBox(width: 4),

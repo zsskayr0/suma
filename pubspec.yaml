@@ -63,6 +63,10 @@ dependencies:
   # Notion/iOS-app feel than Roboto/Segoe.
   google_fonts: ^6.2.1
 
+  # Thin-stroke outline icon set (SVG-based, not Material's fixed-weight
+  # glyphs) for the register-entry panel's precision-tool look.
+  heroicons: ^0.11.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

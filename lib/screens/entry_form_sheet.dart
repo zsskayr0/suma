@@ -1,39 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:heroicons/heroicons.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/entry.dart';
 import '../state/app_state.dart';
+import '../theme/app_theme.dart';
 import '../utils/units.dart';
 import '../widgets/suma_date_picker.dart';
-import '../widgets/suma_floating_sheet.dart';
-import '../widgets/suma_popover.dart';
+import '../widgets/suma_glass_sheet.dart';
 
-/// Bottom sheet used both to add a new measurement and to edit an existing
-/// one (pass [existing] for the edit case). The weight field is shown in
-/// whichever unit the logged-in user prefers, converting to/from kg (the
-/// storage unit) transparently.
+/// The register-entry panel: a centered "liquid glass" card (always dark,
+/// regardless of the app's own theme) styled after a precision design tool
+/// (Figma/macOS) rather than a standard mobile form - ultra-thin outline
+/// icons, hairline field borders instead of filled chips, white/off-white
+/// text at a lighter weight. Used both to add a new measurement and to edit
+/// an existing one (pass [existing] for the edit case). The weight field is
+/// shown in whichever unit the logged-in user prefers, converting to/from kg
+/// (the storage unit) transparently.
 class EntryFormSheet extends StatefulWidget {
   final WeightEntry? existing;
 
   const EntryFormSheet({super.key, this.existing});
 
-  /// Shows the form anchored to [anchorKey] (the "+" button that triggered
-  /// it) as a compact popover when one is given - falls back to the
-  /// centered floating card when there's no specific button to anchor to
-  /// (e.g. the empty-state "Novo registro" button, or editing a row from
-  /// the middle of a long list).
-  static Future<void> show(BuildContext context, {WeightEntry? existing, GlobalKey? anchorKey}) {
-    if (anchorKey != null) {
-      return showSumaPopover(
-        context,
-        anchorKey: anchorKey,
-        width: 400,
-        builder: (_) => EntryFormSheet(existing: existing),
-      );
-    }
-    return showSumaFloatingSheet(
+  static Future<void> show(BuildContext context, {WeightEntry? existing}) {
+    return showSumaGlassSheet(
       context,
       builder: (_) => EntryFormSheet(existing: existing),
     );
@@ -114,13 +106,37 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  static const _labelStyle = TextStyle(color: Colors.white60, fontWeight: FontWeight.w500, fontSize: 13.5);
+  static const _valueStyle = TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 15);
+
+  InputDecoration _fieldDecoration({required String label, required HeroIcons icon}) {
+    OutlineInputBorder border(Color color, double width) =>
+        OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: color, width: width));
+    return InputDecoration(
+      labelText: label,
+      labelStyle: _labelStyle,
+      floatingLabelStyle: const TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w600, fontSize: 13),
+      prefixIcon: Padding(
+        padding: const EdgeInsets.only(left: 2),
+        child: HeroIcon(icon, style: HeroIconStyle.outline, size: 18, color: Colors.white54),
+      ),
+      filled: false,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: border(Colors.white.withValues(alpha: 0.16), 1),
+      border: border(Colors.white.withValues(alpha: 0.16), 1),
+      focusedBorder: border(AppColors.cyan.withValues(alpha: 0.85), 1.3),
+      errorBorder: border(AppColors.negative.withValues(alpha: 0.7), 1),
+      focusedErrorBorder: border(AppColors.negative, 1.3),
+      errorStyle: const TextStyle(color: AppColors.negative, fontSize: 11.5),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
-        left: 20, right: 12, top: 8,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        left: 22, right: 22, top: 18,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 22,
       ),
       child: SingleChildScrollView(
         child: Form(
@@ -134,40 +150,48 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                   Expanded(
                     child: Text(
                       widget.existing == null ? 'Novo registro' : 'Editar registro',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 19),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                    tooltip: 'Fechar',
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: HeroIcon(HeroIcons.xMark, style: HeroIconStyle.outline, size: 20, color: Colors.white70),
+                    ),
                   ),
                 ],
               ),
-              Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 14),
+              Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
+              const SizedBox(height: 18),
               InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 onTap: _pickDate,
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Data', prefixIcon: Icon(Icons.event_outlined)),
-                  child: Text(DateFormat('dd/MM/yyyy').format(_date)),
+                  decoration: _fieldDecoration(label: 'Data', icon: HeroIcons.calendar),
+                  child: Text(DateFormat('dd/MM/yyyy').format(_date), style: _valueStyle),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _weightCtrl,
+                style: _valueStyle,
+                cursorColor: AppColors.cyan,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: InputDecoration(labelText: 'Peso (${Units.label(_unitPref)})', prefixIcon: const Icon(Icons.monitor_weight_outlined)),
+                decoration: _fieldDecoration(label: 'Peso (${Units.label(_unitPref)})', icon: HeroIcons.scale),
                 validator: (v) => _parse(v ?? '') == null ? 'Informe o peso' : null,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _fatCtrl,
+                style: _valueStyle,
+                cursorColor: AppColors.cyan,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: const InputDecoration(labelText: 'Gordura corporal (%) - opcional', prefixIcon: Icon(Icons.pie_chart_outline)),
+                decoration: _fieldDecoration(label: 'Gordura corporal (%) - opcional', icon: HeroIcons.chartPie),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final val = _parse(v);
@@ -176,12 +200,14 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _hydrationCtrl,
+                style: _valueStyle,
+                cursorColor: AppColors.cyan,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: const InputDecoration(labelText: 'Hidratação (%) - opcional', prefixIcon: Icon(Icons.water_drop_outlined)),
+                decoration: _fieldDecoration(label: 'Hidratação (%) - opcional', icon: HeroIcons.beaker),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final val = _parse(v);
@@ -190,18 +216,21 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextFormField(
                 controller: _notesCtrl,
-                decoration: const InputDecoration(labelText: 'Notas - opcional', prefixIcon: Icon(Icons.notes_outlined)),
+                style: _valueStyle,
+                cursorColor: AppColors.cyan,
+                decoration: _fieldDecoration(label: 'Notas - opcional', icon: HeroIcons.documentText),
                 maxLines: 2,
               ),
-              const SizedBox(height: 20),
-              FilledButton(
+              const SizedBox(height: 22),
+              FilledButton.icon(
                 onPressed: _saving ? null : _submit,
-                child: _saving
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Salvar'),
+                icon: _saving
+                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const HeroIcon(HeroIcons.check, style: HeroIconStyle.solid, size: 18),
+                label: const Text('Salvar'),
               ),
             ],
           ),
