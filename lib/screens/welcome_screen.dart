@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/suma_mark.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
@@ -47,7 +48,6 @@ class _WelcomeBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -58,13 +58,7 @@ class _WelcomeBody extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.14), shape: BoxShape.circle),
-                    child: Icon(Icons.monitor_weight_rounded, size: 40, color: scheme.primary),
-                  ),
-                ),
+                const Center(child: SumaMark(size: 84)),
                 const SizedBox(height: 16),
                 Text('Suma', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800), textAlign: TextAlign.center),
                 Text('Monitoramento de peso para você e sua família', style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),

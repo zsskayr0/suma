@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/entry.dart';
 import '../state/app_state.dart';
 import '../utils/units.dart';
+import '../widgets/suma_date_picker.dart';
 
 /// Bottom sheet used both to add a new measurement and to edit an existing
 /// one (pass [existing] for the edit case). The weight field is shown in
@@ -67,8 +68,8 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
+    final picked = await showSumaDatePicker(
+      context,
       initialDate: _date,
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 1)),

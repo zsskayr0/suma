@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
 import '../utils/responsive.dart';
+import '../widgets/suma_mark.dart';
 import 'admin_users_screen.dart';
 import 'dashboard_screen.dart';
 import 'history_screen.dart';
@@ -83,7 +84,7 @@ class _RailBrand extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          Icon(Icons.monitor_weight_rounded, color: Theme.of(context).colorScheme.primary, size: 30),
+          const SumaMark(size: 34),
           const SizedBox(height: 6),
           Text('Suma', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         ],
