@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../state/app_state.dart';
 import '../utils/bmi.dart';
+import '../utils/qr_support.dart';
 import '../utils/units.dart';
 import '../widgets/suma_widgets.dart';
+import 'qr_scan_screen.dart';
 
 /// One-time setup wizard shown right after an account's first sign-in.
 /// Starts with the "rede familiar" choice (only if the account isn't
@@ -298,6 +301,12 @@ class _FamilyPageState extends State<_FamilyPage> {
         child: SumaCard(
           child: Column(
             children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: QrImageView(data: _createdCode!, version: QrVersions.auto, size: 200, gapless: false),
+              ),
+              const SizedBox(height: 14),
               Text(_createdCode!, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 4)),
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -356,7 +365,19 @@ class _FamilyPageState extends State<_FamilyPage> {
                 TextField(
                   controller: _codeCtrl,
                   textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(labelText: 'Código de convite'),
+                  decoration: InputDecoration(
+                    labelText: 'Código de convite',
+                    suffixIcon: qrScanSupported
+                        ? IconButton(
+                            icon: const Icon(Icons.qr_code_scanner_rounded),
+                            tooltip: 'Escanear QR code',
+                            onPressed: () async {
+                              final scanned = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
+                              if (scanned != null) _codeCtrl.text = scanned;
+                            },
+                          )
+                        : null,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 FilledButton(onPressed: _submitting ? null : _join, child: _submitting ? _spinner() : const Text('Entrar')),

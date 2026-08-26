@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Suma talks to Supabase (auth + database) over HTTPS. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Scanning a family invite QR code. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
         android:label="Suma"
         android:name="${applicationName}"

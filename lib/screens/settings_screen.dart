@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +9,12 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../utils/qr_support.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../widgets/qr_code_dialog.dart';
 import '../widgets/suma_widgets.dart';
+import 'qr_scan_screen.dart';
 
 /// "Ajustes" tab: preferences (unit, theme, height, goal weight), family
 /// network management, account actions (export, password) and sign-out.
@@ -23,6 +29,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _exporting = false;
+  bool _importing = false;
   bool _familyBusy = false;
 
   Future<void> _exportMyData() async {
@@ -33,6 +40,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() => _exporting = false);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('CSV salvo em: ${file.path}')));
+  }
+
+  Future<void> _importData() async {
+    final appState = context.read<AppState>();
+    final file = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['csv']);
+    if (file == null) return;
+
+    String content;
+    try {
+      final bytes = await file.readAsBytes();
+      content = utf8.decode(bytes);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O arquivo não parece ser um CSV de texto válido.')));
+      return;
+    }
+
+    final parsed = CsvExportService.parseCsv(content, appState.currentProfile!.id);
+    if (parsed.entries.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhum registro válido encontrado no arquivo.')));
+      return;
+    }
+
+    setState(() => _importing = true);
+    await appState.importEntries(parsed.entries);
+    if (!mounted) return;
+    setState(() => _importing = false);
+    final summary = parsed.skipped > 0
+        ? '${parsed.entries.length} registro(s) importado(s) · ${parsed.skipped} linha(s) ignorada(s).'
+        : '${parsed.entries.length} registro(s) importado(s).';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(summary)));
   }
 
   Future<void> _changePassword() async {
@@ -95,23 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final code = await appState.createFamily(name);
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Rede criada!'),
-          content: Text('Compartilhe este código com sua família: $code'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: code));
-                Navigator.pop(ctx);
-              },
-              child: const Text('Copiar e fechar'),
-            ),
-            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
-          ],
-        ),
-      );
+      await showInviteQrDialog(context, code: code, familyName: 'Rede criada! Compartilhe este código ou QR code.');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
@@ -127,7 +150,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Entrar com código de convite'),
-        content: TextField(controller: controller, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Código de convite')),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            labelText: 'Código de convite',
+            suffixIcon: qrScanSupported
+                ? IconButton(
+                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    tooltip: 'Escanear QR code',
+                    onPressed: () async {
+                      final scanned = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
+                      if (scanned != null) controller.text = scanned;
+                    },
+                  )
+                : null,
+          ),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Entrar')),
@@ -301,10 +340,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text('Código: ${family.inviteCode}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   IconButton(
                     icon: const Icon(Icons.copy_rounded, size: 18),
+                    tooltip: 'Copiar código',
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: family.inviteCode));
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código copiado.')));
                     },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.qr_code_rounded, size: 18),
+                    tooltip: 'Mostrar QR code',
+                    onPressed: () => showInviteQrDialog(context, code: family.inviteCode, familyName: family.name),
                   ),
                 ],
               ),
@@ -328,6 +373,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Exportar meus dados (CSV)'),
             subtitle: const Text('Data, peso, gordura e hidratação'),
             onTap: _exporting ? null : _exportMyData,
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            leading: _importing ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.file_upload_outlined),
+            title: const Text('Importar dados (CSV)'),
+            subtitle: const Text('Adiciona ao seu histórico - mesmo formato da exportação'),
+            onTap: _importing ? null : _importData,
           ),
           const Divider(height: 1, indent: 16, endIndent: 16),
           ListTile(

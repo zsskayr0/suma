@@ -317,6 +317,17 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Bulk-imports entries into the current user's own history (a single
+  /// upsert instead of one round-trip per row). Same date as an existing
+  /// entry overwrites it, matching [addEntry]'s behavior.
+  Future<void> importEntries(List<WeightEntry> entries) async {
+    if (entries.isEmpty) return;
+    final rows = entries.map((e) => e.copyWith(userId: currentProfile!.id).toInsertMap()).toList();
+    await _client.from('weight_entries').upsert(rows, onConflict: 'user_id,date');
+    await _loadEntries();
+    notifyListeners();
+  }
+
   /// Entries for another member of the same family - only succeeds for a
   /// family admin looking at one of their own members (enforced by RLS).
   Future<List<WeightEntry>> entriesFor(String userId) async {
