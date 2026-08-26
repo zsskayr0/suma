@@ -43,6 +43,7 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
+  final _addButtonKey = GlobalKey();
   int? _filterDays;
   Set<String>? _selectedUserIds; // null until initState knows "self"
   final Map<String, List<WeightEntry>> _othersEntries = {};
@@ -146,7 +147,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Histórico')),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => EntryFormSheet.show(context),
+        key: _addButtonKey,
+        onPressed: () => EntryFormSheet.show(context, anchorKey: _addButtonKey),
         tooltip: 'Novo registro',
         child: const Icon(Icons.add),
       ),

@@ -140,11 +140,15 @@ class StatGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: children.length,
+      // A fixed height instead of childAspectRatio: with a ratio, wide
+      // windows (more available width per tile once the column count caps
+      // out) also made each tile *taller*, ballooning the empty space below
+      // the icon/value/label instead of just widening it.
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columns,
         mainAxisSpacing: 16,
         crossAxisSpacing: 12,
-        childAspectRatio: 1.35,
+        mainAxisExtent: 116,
       ),
       itemBuilder: (context, i) => children[i],
     );

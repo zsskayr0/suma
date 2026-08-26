@@ -177,6 +177,19 @@ class AppTheme {
           ),
         ),
       ),
+      // The desktop sidebar (NavigationRail) - without this it falls back to
+      // Material 3's own indicator color, which came out as a solid,
+      // fully-saturated cyan pill behind the selected icon. Same pastel
+      // tinted treatment as the segmented buttons/bottom nav bar instead.
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        indicatorColor: scheme.primary.withValues(alpha: 0.16),
+        indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(controlRadius)),
+        selectedIconTheme: IconThemeData(color: scheme.primary),
+        unselectedIconTheme: IconThemeData(color: scheme.onSurfaceVariant),
+        selectedLabelTextStyle: TextStyle(color: scheme.primary, fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelTextStyle: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500, fontSize: 12),
+      ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: scheme.primary,
         foregroundColor: Colors.white,

@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../utils/units.dart';
 import '../widgets/suma_date_picker.dart';
 import '../widgets/suma_floating_sheet.dart';
+import '../widgets/suma_popover.dart';
 
 /// Bottom sheet used both to add a new measurement and to edit an existing
 /// one (pass [existing] for the edit case). The weight field is shown in
@@ -18,7 +19,20 @@ class EntryFormSheet extends StatefulWidget {
 
   const EntryFormSheet({super.key, this.existing});
 
-  static Future<void> show(BuildContext context, {WeightEntry? existing}) {
+  /// Shows the form anchored to [anchorKey] (the "+" button that triggered
+  /// it) as a compact popover when one is given - falls back to the
+  /// centered floating card when there's no specific button to anchor to
+  /// (e.g. the empty-state "Novo registro" button, or editing a row from
+  /// the middle of a long list).
+  static Future<void> show(BuildContext context, {WeightEntry? existing, GlobalKey? anchorKey}) {
+    if (anchorKey != null) {
+      return showSumaPopover(
+        context,
+        anchorKey: anchorKey,
+        width: 400,
+        builder: (_) => EntryFormSheet(existing: existing),
+      );
+    }
     return showSumaFloatingSheet(
       context,
       builder: (_) => EntryFormSheet(existing: existing),
@@ -105,7 +119,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 12,
+        left: 20, right: 12, top: 8,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: SingleChildScrollView(
@@ -115,19 +129,23 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(color: scheme.outlineVariant, borderRadius: BorderRadius.circular(4)),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.existing == null ? 'Novo registro' : 'Editar registro',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Fechar',
+                  ),
+                ],
               ),
-              Text(
-                widget.existing == null ? 'Novo registro' : 'Editar registro',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 20),
+              Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+              const SizedBox(height: 8),
               InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: _pickDate,

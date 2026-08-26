@@ -21,6 +21,7 @@ Future<T?> showSumaFloatingSheet<T>(
   return showGeneralDialog<T>(
     context: context,
     barrierLabel: 'dismiss',
+    barrierDismissible: true,
     barrierColor: Colors.black.withValues(alpha: 0.28),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (ctx, anim, secAnim) {
