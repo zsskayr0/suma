@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/setup_admin_screen.dart';
 import 'state/app_state.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const SumaApp());
@@ -17,20 +19,30 @@ class SumaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => AppState()..bootstrap(),
-      child: MaterialApp(
-        title: 'Suma',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D6B)),
-          useMaterial3: true,
-        ),
-        darkTheme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D6B), brightness: Brightness.dark),
-          useMaterial3: true,
-        ),
-        home: const _RootRouter(),
+      child: Consumer<AppState>(
+        builder: (context, appState, _) {
+          return MaterialApp(
+            title: 'Suma',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: _themeModeFor(appState.currentUser?.themePref),
+            home: const _RootRouter(),
+          );
+        },
       ),
     );
+  }
+
+  ThemeMode _themeModeFor(String? pref) {
+    switch (pref) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
   }
 }
 
@@ -50,6 +62,8 @@ class _RootRouter extends StatelessWidget {
         return const SetupAdminScreen();
       case AppPhase.needsLogin:
         return const LoginScreen();
+      case AppPhase.needsOnboarding:
+        return const OnboardingScreen();
       case AppPhase.ready:
         return const HomeScreen();
     }

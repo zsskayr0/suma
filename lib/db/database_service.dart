@@ -36,7 +36,7 @@ class DatabaseService {
 
     return openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users (
@@ -46,7 +46,12 @@ class DatabaseService {
             password_hash TEXT NOT NULL,
             password_salt TEXT NOT NULL,
             role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            height_cm REAL,
+            goal_weight_kg REAL,
+            unit_pref TEXT NOT NULL DEFAULT 'kg',
+            theme_pref TEXT NOT NULL DEFAULT 'system',
+            onboarded INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('''
@@ -62,6 +67,15 @@ class DatabaseService {
           )
         ''');
         await db.execute('CREATE INDEX idx_entries_user_date ON entries(user_id, date)');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE users ADD COLUMN height_cm REAL');
+          await db.execute('ALTER TABLE users ADD COLUMN goal_weight_kg REAL');
+          await db.execute("ALTER TABLE users ADD COLUMN unit_pref TEXT NOT NULL DEFAULT 'kg'");
+          await db.execute("ALTER TABLE users ADD COLUMN theme_pref TEXT NOT NULL DEFAULT 'system'");
+          await db.execute('ALTER TABLE users ADD COLUMN onboarded INTEGER NOT NULL DEFAULT 0');
+        }
       },
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');

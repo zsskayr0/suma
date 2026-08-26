@@ -39,7 +39,11 @@ lib/
   db/         - DatabaseService (schema + CRUD SQLite)
   services/   - AuthService (hash de senha) e CsvExportService
   state/      - AppState (ChangeNotifier central da app)
-  screens/    - Telas: setup do admin, login, registros, usuários, conta
+  theme/      - AppTheme (tokens de design: cores, raios, tema claro/escuro)
+  utils/      - Bmi, Units (kg/lb) e Responsive (breakpoints mobile/desktop)
+  widgets/    - Componentes reutilizáveis (SumaCard, StatTile, StepperField, WeightLineChart, ...)
+  screens/    - Telas: setup do admin, login, onboarding, painel, histórico,
+                usuários, ajustes
 ```
 
 ## Rodando o projeto
@@ -61,11 +65,18 @@ Gerar instalável:
 
 ```bash
 # Windows
-flutter build windows
+flutter build windows --release --no-tree-shake-icons
 
 # Android (APK)
-flutter build apk --release
+flutter build apk --release --no-tree-shake-icons
 ```
+
+> **`--no-tree-shake-icons` é necessário.** Sem essa flag, o build de release
+> do Flutter remove do font de ícones qualquer glyph que sua análise estática
+> não consiga provar como "usado" - e ela erra em ícones referenciados
+> indiretamente (dentro de ternários, StepperField, etc.), fazendo alguns
+> ícones somem silenciosamente (viram um espaço em branco). O app é pequeno,
+> então o custo extra de alguns KB não importa.
 
 ## Contas e segurança
 

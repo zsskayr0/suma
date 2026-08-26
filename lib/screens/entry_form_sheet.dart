@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 
 import '../models/entry.dart';
 import '../state/app_state.dart';
+import '../utils/units.dart';
 
 /// Bottom sheet used both to add a new measurement and to edit an existing
-/// one (pass [existing] for the edit case).
+/// one (pass [existing] for the edit case). The weight field is shown in
+/// whichever unit the logged-in user prefers, converting to/from kg (the
+/// storage unit) transparently.
 class EntryFormSheet extends StatefulWidget {
   final WeightEntry? existing;
 
@@ -31,20 +34,22 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
   late final TextEditingController _fatCtrl;
   late final TextEditingController _hydrationCtrl;
   late final TextEditingController _notesCtrl;
+  late String _unitPref;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     final e = widget.existing;
+    _unitPref = context.read<AppState>().currentUser?.unitPref ?? 'kg';
     _date = e?.date ?? DateTime.now();
-    _weightCtrl = TextEditingController(text: e != null ? _fmt(e.weightKg) : '');
+    _weightCtrl = TextEditingController(text: e != null ? _fmt(Units.displayValue(e.weightKg, _unitPref)) : '');
     _fatCtrl = TextEditingController(text: e?.bodyFatPct != null ? _fmt(e!.bodyFatPct!) : '');
     _hydrationCtrl = TextEditingController(text: e?.hydrationPct != null ? _fmt(e!.hydrationPct!) : '');
     _notesCtrl = TextEditingController(text: e?.notes ?? '');
   }
 
-  String _fmt(double v) => v == (v.truncateToDouble()) ? v.toStringAsFixed(0) : v.toString();
+  String _fmt(double v) => v == (v.truncateToDouble()) ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
   @override
   void dispose() {
@@ -74,7 +79,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final appState = context.read<AppState>();
-    final weight = _parse(_weightCtrl.text)!;
+    final weight = Units.toKg(_parse(_weightCtrl.text)!, _unitPref);
     final fat = _parse(_fatCtrl.text);
     final hydration = _parse(_hydrationCtrl.text);
     final notes = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
@@ -95,9 +100,10 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 20,
+        left: 20, right: 20, top: 12,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: SingleChildScrollView(
@@ -107,12 +113,21 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(color: scheme.outlineVariant, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
               Text(
                 widget.existing == null ? 'Novo registro' : 'Editar registro',
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               InkWell(
+                borderRadius: BorderRadius.circular(16),
                 onTap: _pickDate,
                 child: InputDecorator(
                   decoration: const InputDecoration(labelText: 'Data', prefixIcon: Icon(Icons.event_outlined)),
@@ -123,7 +138,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               TextFormField(
                 controller: _weightCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Peso (kg)', prefixIcon: Icon(Icons.monitor_weight_outlined)),
+                decoration: InputDecoration(labelText: 'Peso (${Units.label(_unitPref)})', prefixIcon: const Icon(Icons.monitor_weight_outlined)),
                 validator: (v) => _parse(v ?? '') == null ? 'Informe o peso' : null,
               ),
               const SizedBox(height: 12),
@@ -162,7 +177,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               FilledButton(
                 onPressed: _saving ? null : _submit,
                 child: _saving
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('Salvar'),
               ),
             ],

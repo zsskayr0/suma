@@ -5,7 +5,7 @@ import '../models/entry.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 
-enum AppPhase { loading, needsSetup, needsLogin, ready }
+enum AppPhase { loading, needsSetup, needsLogin, needsOnboarding, ready }
 
 /// Single source of truth for the running app: which phase we're in, who is
 /// logged in, and the data that phase needs. Screens read it with
@@ -43,7 +43,7 @@ class AppState extends ChangeNotifier {
     );
     final created = await _db.createUser(admin);
     currentUser = created;
-    phase = AppPhase.ready;
+    phase = AppPhase.needsOnboarding;
     await _loadEntries();
     notifyListeners();
   }
@@ -57,13 +57,64 @@ class AppState extends ChangeNotifier {
     }
     authError = null;
     currentUser = user;
-    phase = AppPhase.ready;
+    phase = user.onboarded ? AppPhase.ready : AppPhase.needsOnboarding;
     if (user.isAdmin) {
       await _loadUsers();
     }
     await _loadEntries();
     notifyListeners();
     return true;
+  }
+
+  // ---------------- Onboarding & preferences (current user) ----------------
+
+  /// Completes the one-time onboarding wizard: stores height/unit/theme
+  /// preferences and logs the very first weight entry in one go.
+  Future<void> completeOnboarding({
+    required double heightCm,
+    required double initialWeightKg,
+    double? goalWeightKg,
+    required String unitPref,
+    required String themePref,
+  }) async {
+    final updated = currentUser!.copyWith(
+      heightCm: heightCm,
+      goalWeightKg: goalWeightKg,
+      clearGoal: goalWeightKg == null,
+      unitPref: unitPref,
+      themePref: themePref,
+      onboarded: true,
+    );
+    await _db.updateUser(updated);
+    currentUser = updated;
+    await addEntry(date: DateTime.now(), weightKg: initialWeightKg);
+    phase = AppPhase.ready;
+    notifyListeners();
+  }
+
+  Future<void> updateThemePref(String themePref) async {
+    final updated = currentUser!.copyWith(themePref: themePref);
+    await _db.updateUser(updated);
+    currentUser = updated;
+    notifyListeners();
+  }
+
+  Future<void> updateUnitPref(String unitPref) async {
+    final updated = currentUser!.copyWith(unitPref: unitPref);
+    await _db.updateUser(updated);
+    currentUser = updated;
+    notifyListeners();
+  }
+
+  Future<void> updateBodyProfile({double? heightCm, double? goalWeightKg, bool clearGoal = false}) async {
+    final updated = currentUser!.copyWith(
+      heightCm: heightCm,
+      goalWeightKg: goalWeightKg,
+      clearGoal: clearGoal,
+    );
+    await _db.updateUser(updated);
+    currentUser = updated;
+    notifyListeners();
   }
 
   void logout() {

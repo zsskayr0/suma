@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
+import '../theme/app_theme.dart';
+import '../widgets/suma_widgets.dart';
 import 'user_form_dialog.dart';
 
 /// Admin-only tab: create/manage every other account, reset passwords, and
@@ -88,6 +90,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final users = appState.users;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -107,44 +110,91 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         icon: const Icon(Icons.person_add_alt),
         label: const Text('Nova conta'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(8, 8, 8, 96),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final user = users[index];
-          final isSelf = user.id == appState.currentUser?.id;
-          return Card(
-            child: ListTile(
-              leading: CircleAvatar(child: Text(user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase())),
-              title: Text(user.name),
-              subtitle: Text('${user.username} · ${user.isAdmin ? 'Administrador' : 'Usuário'}${isSelf ? ' · você' : ''}'),
-              trailing: PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'export':
-                      _exportUser(user);
-                      break;
-                    case 'reset':
-                      _resetPassword(user);
-                      break;
-                    case 'delete':
-                      _deleteUser(user);
-                      break;
-                  }
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'export', child: Text('Exportar CSV')),
-                  const PopupMenuItem(value: 'reset', child: Text('Redefinir senha')),
-                  PopupMenuItem(
-                    value: 'delete',
-                    enabled: !isSelf,
-                    child: const Text('Remover conta'),
-                  ),
-                ],
+      body: ResponsiveBody(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final user in users) ...[
+              _UserCard(
+                user: user,
+                isSelf: user.id == appState.currentUser?.id,
+                scheme: scheme,
+                onExport: () => _exportUser(user),
+                onReset: () => _resetPassword(user),
+                onDelete: () => _deleteUser(user),
               ),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserCard extends StatelessWidget {
+  final AppUser user;
+  final bool isSelf;
+  final ColorScheme scheme;
+  final VoidCallback onExport;
+  final VoidCallback onReset;
+  final VoidCallback onDelete;
+
+  const _UserCard({
+    required this.user,
+    required this.isSelf,
+    required this.scheme,
+    required this.onExport,
+    required this.onReset,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SumaCard(
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: scheme.primary.withValues(alpha: 0.16),
+            child: Text(
+              user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase(),
+              style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800),
             ),
-          );
-        },
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('@${user.username}${isSelf ? ' · você' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          Pill(text: user.isAdmin ? 'Admin' : 'Usuário', color: user.isAdmin ? AppColors.goalAccent : scheme.primary),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'export':
+                  onExport();
+                  break;
+                case 'reset':
+                  onReset();
+                  break;
+                case 'delete':
+                  onDelete();
+                  break;
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'export', child: Text('Exportar CSV')),
+              const PopupMenuItem(value: 'reset', child: Text('Redefinir senha')),
+              PopupMenuItem(value: 'delete', enabled: !isSelf, child: const Text('Remover conta')),
+            ],
+          ),
+        ],
       ),
     );
   }
