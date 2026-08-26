@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Suma talks to Supabase (auth + database) over HTTPS. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="Suma"
         android:name="${applicationName}"
