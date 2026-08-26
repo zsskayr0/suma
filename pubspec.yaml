@@ -54,6 +54,7 @@ dependencies:
 
   # CSV export hand-off: share sheet on Android, reveal-in-folder on desktop
   share_plus: ^13.3.0
+  supabase_flutter: ^2.17.2
 
 dev_dependencies:
   flutter_test:
