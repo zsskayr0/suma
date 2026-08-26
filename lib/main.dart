@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/supabase_config.dart';
 import 'screens/home_screen.dart';
-import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/setup_admin_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.anonKey);
   runApp(const SumaApp());
 }
 
@@ -26,7 +29,7 @@ class SumaApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
-            themeMode: _themeModeFor(appState.currentUser?.themePref),
+            themeMode: _themeModeFor(appState.currentProfile?.themePref),
             home: const _RootRouter(),
           );
         },
@@ -58,10 +61,8 @@ class _RootRouter extends StatelessWidget {
     switch (phase) {
       case AppPhase.loading:
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      case AppPhase.needsSetup:
-        return const SetupAdminScreen();
-      case AppPhase.needsLogin:
-        return const LoginScreen();
+      case AppPhase.needsAuth:
+        return const WelcomeScreen();
       case AppPhase.needsOnboarding:
         return const OnboardingScreen();
       case AppPhase.ready:

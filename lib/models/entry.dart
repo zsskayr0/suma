@@ -1,7 +1,9 @@
-/// A single weight-tracking measurement for one user on one day.
+/// A single weight-tracking measurement for one user on one day. Backed by
+/// `public.weight_entries` in Supabase - `id`/`userId` are uuids (Postgres
+/// `uuid`/Supabase Auth user id), not local auto-increment integers.
 class WeightEntry {
-  final int? id;
-  final int userId;
+  final String? id;
+  final String userId;
   final DateTime date; // day granularity (time component ignored)
   final double weightKg;
   final double? bodyFatPct;
@@ -21,13 +23,16 @@ class WeightEntry {
   });
 
   WeightEntry copyWith({
-    int? id,
-    int? userId,
+    String? id,
+    String? userId,
     DateTime? date,
     double? weightKg,
     double? bodyFatPct,
+    bool clearBodyFat = false,
     double? hydrationPct,
+    bool clearHydration = false,
     String? notes,
+    bool clearNotes = false,
     DateTime? createdAt,
   }) {
     return WeightEntry(
@@ -35,37 +40,43 @@ class WeightEntry {
       userId: userId ?? this.userId,
       date: date ?? this.date,
       weightKg: weightKg ?? this.weightKg,
-      bodyFatPct: bodyFatPct ?? this.bodyFatPct,
-      hydrationPct: hydrationPct ?? this.hydrationPct,
-      notes: notes ?? this.notes,
+      bodyFatPct: clearBodyFat ? null : (bodyFatPct ?? this.bodyFatPct),
+      hydrationPct: clearHydration ? null : (hydrationPct ?? this.hydrationPct),
+      notes: clearNotes ? null : (notes ?? this.notes),
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  Map<String, Object?> toMap() {
+  /// Row to send on insert/update - `id`/`created_at` are left out (the
+  /// database assigns them via column defaults).
+  Map<String, Object?> toInsertMap() {
     return {
-      'id': id,
       'user_id': userId,
       'date': _dateOnly(date),
       'weight_kg': weightKg,
       'body_fat_pct': bodyFatPct,
       'hydration_pct': hydrationPct,
       'notes': notes,
-      'created_at': createdAt.toIso8601String(),
     };
   }
 
-  factory WeightEntry.fromMap(Map<String, Object?> map) {
+  factory WeightEntry.fromMap(Map<String, dynamic> map) {
     return WeightEntry(
-      id: map['id'] as int?,
-      userId: map['user_id'] as int,
+      id: map['id'] as String?,
+      userId: map['user_id'] as String,
       date: DateTime.parse(map['date'] as String),
-      weightKg: (map['weight_kg'] as num).toDouble(),
-      bodyFatPct: (map['body_fat_pct'] as num?)?.toDouble(),
-      hydrationPct: (map['hydration_pct'] as num?)?.toDouble(),
+      weightKg: _toDouble(map['weight_kg'])!,
+      bodyFatPct: _toDouble(map['body_fat_pct']),
+      hydrationPct: _toDouble(map['hydration_pct']),
       notes: map['notes'] as String?,
-      createdAt: DateTime.parse(map['created_at'] as String),
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
     );
+  }
+
+  static double? _toDouble(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
   }
 
   static String _dateOnly(DateTime d) {

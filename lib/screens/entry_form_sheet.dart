@@ -41,7 +41,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    _unitPref = context.read<AppState>().currentUser?.unitPref ?? 'kg';
+    _unitPref = context.read<AppState>().currentProfile?.unitPref ?? 'kg';
     _date = e?.date ?? DateTime.now();
     _weightCtrl = TextEditingController(text: e != null ? _fmt(Units.displayValue(e.weightKg, _unitPref)) : '');
     _fatCtrl = TextEditingController(text: e?.bodyFatPct != null ? _fmt(e!.bodyFatPct!) : '');

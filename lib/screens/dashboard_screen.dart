@@ -23,7 +23,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final user = appState.currentUser!;
+    final user = appState.currentProfile!;
     final entries = appState.entries; // date DESC, id DESC
     final latest = entries.isNotEmpty ? entries.first : null;
     final bmi = Bmi.calculate(weightKg: latest?.weightKg, heightCm: user.heightCm);

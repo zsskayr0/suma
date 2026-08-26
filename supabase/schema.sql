@@ -124,6 +124,15 @@ create policy "profiles_update_self"
   using (id = auth.uid())
   with check (id = auth.uid());
 
+-- The policy above only restricts *which row* can be updated, not which
+-- columns - without this, any member could set their own `role` to
+-- 'admin' and read the rest of the family's data. `family_id`/`role`
+-- must only ever change through the SECURITY DEFINER RPCs below, which
+-- validate authorization properly.
+revoke update on public.profiles from authenticated;
+grant update (name, height_cm, goal_weight_kg, unit_pref, theme_pref, onboarded)
+  on public.profiles to authenticated;
+
 -- ---------------------------------------------------------------------
 -- families
 -- ---------------------------------------------------------------------
@@ -206,6 +215,45 @@ begin
     where id = auth.uid();
 
   return target_family_id;
+end;
+$$;
+
+-- Lets a family's admin remove a member from the family (the member's
+-- own account/data is untouched - they just stop being part of the
+-- network and become the sole admin of their own, unlinked profile).
+create or replace function public.remove_member_from_family(member_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.my_role() != 'admin' then
+    raise exception 'Apenas administradores podem remover membros.';
+  end if;
+
+  if public.profile_family_id(member_id) is distinct from public.my_family_id() then
+    raise exception 'Esse usuário não faz parte da sua rede.';
+  end if;
+
+  if member_id = auth.uid() then
+    raise exception 'Você não pode remover a si mesmo. Se quiser sair da rede, peça para outro admin.';
+  end if;
+
+  update public.profiles set family_id = null, role = 'admin' where id = member_id;
+end;
+$$;
+
+-- Lets a member leave their own family (self-service version of
+-- remove_member_from_family, which only an admin can use on others).
+create or replace function public.leave_family()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.profiles set family_id = null, role = 'admin' where id = auth.uid();
 end;
 $$;
 

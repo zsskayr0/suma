@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
@@ -8,10 +10,8 @@ import '../utils/responsive.dart';
 import '../utils/units.dart';
 import '../widgets/suma_widgets.dart';
 
-/// "Ajustes" tab: preferences (unit, theme, height, goal weight), account
-/// actions (export, password) and sign-out. Replaces the old bare "Conta"
-/// tab with something that actually reflects the per-user profile collected
-/// during onboarding.
+/// "Ajustes" tab: preferences (unit, theme, height, goal weight), family
+/// network management, account actions (export, password) and sign-out.
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onOpenUsers;
 
@@ -23,11 +23,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _exporting = false;
+  bool _familyBusy = false;
 
   Future<void> _exportMyData() async {
     setState(() => _exporting = true);
     final appState = context.read<AppState>();
-    final user = appState.currentUser!;
+    final user = appState.currentProfile!;
     final file = await CsvExportService.exportAndHandOff(user, appState.entries);
     if (!mounted) return;
     setState(() => _exporting = false);
@@ -58,15 +59,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     if (!mounted) return;
-    final appState = context.read<AppState>();
-    await appState.resetPassword(appState.currentUser!, newPassword);
+    final error = await context.read<AppState>().changePassword(newPassword);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Senha atualizada.')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Senha atualizada.')));
   }
 
   Future<void> _editHeightAndGoal() async {
     final appState = context.read<AppState>();
-    final user = appState.currentUser!;
+    final user = appState.currentProfile!;
     final result = await showModalBottomSheet<_ProfileEdit>(
       context: context,
       isScrollControlled: true,
@@ -76,10 +76,111 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await appState.updateBodyProfile(heightCm: result.heightCm, goalWeightKg: result.goalWeightKg, clearGoal: result.goalWeightKg == null);
   }
 
+  Future<void> _createFamily() async {
+    final appState = context.read<AppState>();
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Criar rede familiar'),
+        content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Nome da rede (ex: Família Silva)')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Criar')),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty) return;
+    setState(() => _familyBusy = true);
+    try {
+      final code = await appState.createFamily(name);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Rede criada!'),
+          content: Text('Compartilhe este código com sua família: $code'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: code));
+                Navigator.pop(ctx);
+              },
+              child: const Text('Copiar e fechar'),
+            ),
+            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+    } finally {
+      if (mounted) setState(() => _familyBusy = false);
+    }
+  }
+
+  Future<void> _joinFamily() async {
+    final appState = context.read<AppState>();
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Entrar com código de convite'),
+        content: TextField(controller: controller, textCapitalization: TextCapitalization.characters, decoration: const InputDecoration(labelText: 'Código de convite')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Entrar')),
+        ],
+      ),
+    );
+    if (code == null || code.trim().isEmpty) return;
+    setState(() => _familyBusy = true);
+    try {
+      await appState.joinFamily(code);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Você entrou na rede familiar.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_friendlyError(e))));
+    } finally {
+      if (mounted) setState(() => _familyBusy = false);
+    }
+  }
+
+  Future<void> _leaveFamily() async {
+    final appState = context.read<AppState>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sair da rede familiar?'),
+        content: const Text('Seus próprios dados continuam com você - só deixa de fazer parte dessa rede.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sair')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _familyBusy = true);
+    final error = await appState.leaveFamily();
+    if (!mounted) return;
+    setState(() => _familyBusy = false);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  String _friendlyError(Object e) {
+    if (e is PostgrestException) return e.message;
+    return 'Não foi possível concluir. Verifique sua conexão e tente novamente.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final user = appState.currentUser!;
+    final user = appState.currentProfile!;
+    final family = appState.currentFamily;
     final wide = Responsive.isDesktop(context);
 
     final profileCard = SumaCard(
@@ -100,11 +201,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text('@${user.username}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                Text(user.email ?? '', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
           ),
-          Pill(text: user.isAdmin ? 'Administrador' : 'Usuário', color: user.isAdmin ? AppColors.goalAccent : Theme.of(context).colorScheme.primary),
+          if (family != null) Pill(text: user.isAdmin ? 'Admin da rede' : 'Membro', color: user.isAdmin ? AppColors.goalAccent : Theme.of(context).colorScheme.primary),
         ],
       ),
     );
@@ -166,6 +267,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
+    final familyCard = SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.groups_rounded),
+              const SizedBox(width: 10),
+              Expanded(child: Text('Rede familiar', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (family == null) ...[
+            Text(
+              'Você ainda não faz parte de uma rede familiar.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: OutlinedButton(onPressed: _familyBusy ? null : _createFamily, child: const Text('Criar rede'))),
+                const SizedBox(width: 10),
+                Expanded(child: OutlinedButton(onPressed: _familyBusy ? null : _joinFamily, child: const Text('Entrar com código'))),
+              ],
+            ),
+          ] else ...[
+            Text(family.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            if (user.isAdmin)
+              Row(
+                children: [
+                  Text('Código: ${family.inviteCode}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: family.inviteCode));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código copiado.')));
+                    },
+                  ),
+                ],
+              ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: _familyBusy ? null : _leaveFamily,
+              style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.negative), foregroundColor: AppColors.negative),
+              child: const Text('Sair da rede'),
+            ),
+          ],
+        ],
+      ),
+    );
+
     final dataCard = SumaCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -182,11 +335,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Alterar senha'),
             onTap: _changePassword,
           ),
-          if (user.isAdmin && widget.onOpenUsers != null) ...[
+          if (user.isAdmin && family != null && widget.onOpenUsers != null) ...[
             const Divider(height: 1, indent: 16, endIndent: 16),
             ListTile(
               leading: const Icon(Icons.group_outlined),
-              title: const Text('Gerenciar usuários'),
+              title: const Text('Ver membros da rede'),
               onTap: widget.onOpenUsers,
             ),
           ],
@@ -194,8 +347,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
+    final signOutButton = OutlinedButton.icon(
+      onPressed: () => appState.signOut(),
+      icon: Icon(Icons.logout, color: AppColors.negative),
+      label: Text('Sair', style: TextStyle(color: AppColors.negative)),
+      style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.negative)),
+    );
+
     final cards = [
       profileCard,
+      const SizedBox(height: 14),
+      familyCard,
       const SizedBox(height: 14),
       const SectionLabel('Preferências'),
       preferencesCard,
@@ -205,12 +367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SectionLabel('Dados & conta'),
       dataCard,
       const SizedBox(height: 24),
-      OutlinedButton.icon(
-        onPressed: () => appState.logout(),
-        icon: Icon(Icons.logout, color: AppColors.negative),
-        label: Text('Sair', style: TextStyle(color: AppColors.negative)),
-        style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.negative)),
-      ),
+      signOutButton,
     ];
 
     return Scaffold(
@@ -223,7 +380,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [profileCard, const SizedBox(height: 14), bodyCard])),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [profileCard, const SizedBox(height: 14), familyCard, const SizedBox(height: 14), bodyCard])),
                       const SizedBox(width: 14),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [const SectionLabel('Preferências'), preferencesCard])),
                     ],
@@ -232,18 +389,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SectionLabel('Dados & conta'),
                   dataCard,
                   const SizedBox(height: 24),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      width: 220,
-                      child: OutlinedButton.icon(
-                        onPressed: () => appState.logout(),
-                        icon: Icon(Icons.logout, color: AppColors.negative),
-                        label: Text('Sair', style: TextStyle(color: AppColors.negative)),
-                        style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.negative)),
-                      ),
-                    ),
-                  ),
+                  Align(alignment: Alignment.centerLeft, child: SizedBox(width: 220, child: signOutButton)),
                 ],
               )
             : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: cards),

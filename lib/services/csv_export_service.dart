@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/entry.dart';
-import '../models/user.dart';
+import '../models/profile.dart';
 
 /// Writes one CSV file per user (date, weight, body fat, hydration) and
 /// hands it off in a platform-appropriate way: on Android through the share
@@ -34,19 +34,19 @@ class CsvExportService {
 
   static String _fmt(double? value) => value == null ? '' : value.toString();
 
-  static String _fileNameFor(AppUser user) {
+  static String _fileNameFor(Profile profile) {
     final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final safeUsername = user.username.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-    return 'suma_${safeUsername}_$stamp.csv';
+    final slug = (profile.email ?? profile.name).replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    return 'suma_${slug}_$stamp.csv';
   }
 
-  /// Writes the CSV for [user] to disk and returns the file. Does not
+  /// Writes the CSV for [profile] to disk and returns the file. Does not
   /// share/reveal it - see [exportAndHandOff] for the full flow.
-  static Future<File> writeCsvFile(AppUser user, List<WeightEntry> entries) async {
+  static Future<File> writeCsvFile(Profile profile, List<WeightEntry> entries) async {
     final dir = await getApplicationDocumentsDirectory();
     final exportDir = Directory(p.join(dir.path, 'Suma', 'exports'));
     await exportDir.create(recursive: true);
-    final file = File(p.join(exportDir.path, _fileNameFor(user)));
+    final file = File(p.join(exportDir.path, _fileNameFor(profile)));
     await file.writeAsString(buildCsv(entries));
     return file;
   }
@@ -55,14 +55,14 @@ class CsvExportService {
   /// share sheet (Android/iOS) or reveal it in the OS file explorer
   /// (Windows/Linux/macOS). Returns the written file so the caller can show
   /// its path in the UI regardless of platform.
-  static Future<File> exportAndHandOff(AppUser user, List<WeightEntry> entries) async {
-    final file = await writeCsvFile(user, entries);
+  static Future<File> exportAndHandOff(Profile profile, List<WeightEntry> entries) async {
+    final file = await writeCsvFile(profile, entries);
 
     if (Platform.isAndroid || Platform.isIOS) {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path)],
-          subject: 'Suma - dados de ${user.name}',
+          subject: 'Suma - dados de ${profile.name}',
         ),
       );
     } else if (Platform.isWindows) {

@@ -26,12 +26,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin = context.watch<AppState>().currentUser?.isAdmin ?? false;
+    final appState = context.watch<AppState>();
+    final showFamilyTab = (appState.currentProfile?.isAdmin ?? false) && appState.currentFamily != null;
 
     final items = <_NavItem>[
       _NavItem('Hoje', Icons.today_outlined, Icons.today_rounded, DashboardScreen(onViewHistory: () => _goTo(1))),
       _NavItem('Histórico', Icons.history_rounded, Icons.history_rounded, const HistoryScreen()),
-      if (isAdmin) _NavItem('Usuários', Icons.group_outlined, Icons.group_rounded, const AdminUsersScreen()),
+      if (showFamilyTab) _NavItem('Usuários', Icons.group_outlined, Icons.group_rounded, const AdminUsersScreen()),
       _NavItem('Ajustes', Icons.settings_outlined, Icons.settings_rounded, const SettingsScreen()),
     ];
 

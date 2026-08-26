@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../state/app_state.dart';
 import '../utils/bmi.dart';
 import '../utils/units.dart';
 import '../widgets/suma_widgets.dart';
 
-/// One-time, per-user setup wizard shown right after an account's first
-/// login: preferred unit, height, starting weight, optional goal weight and
-/// light/dark preference - finishing it logs the very first entry so the
+/// One-time setup wizard shown right after an account's first sign-in.
+/// Starts with the "rede familiar" choice (only if the account isn't
+/// already in a family - e.g. it was just created), then walks through
+/// preferred unit, height, starting weight, optional goal weight and
+/// light/dark preference. Finishing it logs the very first entry so the
 /// dashboard never opens empty-handed.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -20,7 +24,8 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
   int _page = 0;
-  static const _pageCount = 4;
+  late final bool _showFamilyPage;
+  late final int _pageCount;
 
   String _unitPref = 'kg';
   double _heightCm = 170;
@@ -29,6 +34,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   double _goalWeightKg = 65;
   String _themePref = 'system';
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _showFamilyPage = context.read<AppState>().currentProfile?.familyId == null;
+    _pageCount = _showFamilyPage ? 5 : 4;
+    _themePref = context.read<AppState>().currentProfile?.themePref ?? 'system';
+  }
 
   @override
   void dispose() {
@@ -115,6 +128,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (i) => setState(() => _page = i),
                     children: [
+                      if (_showFamilyPage) const _FamilyPage(),
                       _UnitPage(unitPref: _unitPref, onChanged: (v) => setState(() => _unitPref = v)),
                       _HeightWeightPage(
                         unitPref: _unitPref,
@@ -186,6 +200,219 @@ class _OnboardingScaffold extends StatelessWidget {
   }
 }
 
+enum _FamilyAction { none, create, join }
+
+/// First wizard page (only shown when the account isn't in a family yet):
+/// create a brand-new "rede familiar" or join one via invite code. Neither
+/// is required - the outer wizard's own "Continuar" moves on regardless,
+/// and both choices stay available later from Ajustes.
+class _FamilyPage extends StatefulWidget {
+  const _FamilyPage();
+
+  @override
+  State<_FamilyPage> createState() => _FamilyPageState();
+}
+
+class _FamilyPageState extends State<_FamilyPage> {
+  _FamilyAction _action = _FamilyAction.none;
+  final _nameCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
+  bool _submitting = false;
+  String? _error;
+  String? _createdCode;
+  bool _joined = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  String _friendlyError(Object e) {
+    if (e is PostgrestException) return e.message;
+    return 'Não foi possível concluir. Verifique sua conexão e tente novamente.';
+  }
+
+  Future<void> _create() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Dê um nome para sua rede.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final code = await context.read<AppState>().createFamily(_nameCtrl.text);
+      if (!mounted) return;
+      setState(() {
+        _createdCode = code;
+        _submitting = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _friendlyError(e);
+        _submitting = false;
+      });
+    }
+  }
+
+  Future<void> _join() async {
+    if (_codeCtrl.text.trim().isEmpty) {
+      setState(() => _error = 'Informe o código de convite.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().joinFamily(_codeCtrl.text);
+      if (!mounted) return;
+      setState(() {
+        _joined = true;
+        _submitting = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _friendlyError(e);
+        _submitting = false;
+      });
+    }
+  }
+
+  Widget _spinner() => const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (_createdCode != null) {
+      return _OnboardingScaffold(
+        icon: Icons.groups_rounded,
+        title: 'Rede criada!',
+        subtitle: 'Compartilhe este código com sua família - qualquer pessoa pode usá-lo para entrar na sua rede ao criar a própria conta.',
+        child: SumaCard(
+          child: Column(
+            children: [
+              Text(_createdCode!, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 4)),
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: _createdCode!));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código copiado.')));
+                },
+                icon: const Icon(Icons.copy_rounded),
+                label: const Text('Copiar código'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_joined) {
+      return _OnboardingScaffold(
+        icon: Icons.groups_rounded,
+        title: 'Tudo certo!',
+        subtitle: 'Você entrou na rede familiar. O administrador dela poderá acompanhar seu progresso.',
+        child: const SizedBox.shrink(),
+      );
+    }
+
+    return _OnboardingScaffold(
+      icon: Icons.groups_rounded,
+      title: 'Rede familiar',
+      subtitle: 'Crie sua própria rede ou entre em uma já existente da sua família. Pode pular e decidir depois em Ajustes.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FamilyActionCard(
+            icon: Icons.add_home_rounded,
+            title: 'Criar minha rede',
+            expanded: _action == _FamilyAction.create,
+            onTap: () => setState(() => _action = _action == _FamilyAction.create ? _FamilyAction.none : _FamilyAction.create),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Nome da rede (ex: Família Silva)')),
+                const SizedBox(height: 10),
+                FilledButton(onPressed: _submitting ? null : _create, child: _submitting ? _spinner() : const Text('Criar')),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _FamilyActionCard(
+            icon: Icons.qr_code_rounded,
+            title: 'Entrar com código de convite',
+            expanded: _action == _FamilyAction.join,
+            onTap: () => setState(() => _action = _action == _FamilyAction.join ? _FamilyAction.none : _FamilyAction.join),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _codeCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Código de convite'),
+                ),
+                const SizedBox(height: 10),
+                FilledButton(onPressed: _submitting ? null : _join, child: _submitting ? _spinner() : const Text('Entrar')),
+              ],
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: scheme.error)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FamilyActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final bool expanded;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _FamilyActionCard({required this.icon, required this.title, required this.expanded, required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onTap,
+            child: Row(
+              children: [
+                Icon(icon, color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text(title, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600))),
+                Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, color: scheme.onSurfaceVariant),
+              ],
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity, height: 0),
+            secondChild: Padding(padding: const EdgeInsets.only(top: 14), child: child),
+            crossFadeState: expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+            sizeCurve: Curves.easeInOut,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _UnitPage extends StatelessWidget {
   final String unitPref;
   final ValueChanged<String> onChanged;
@@ -195,8 +422,8 @@ class _UnitPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return _OnboardingScaffold(
       icon: Icons.straighten_rounded,
-      title: 'Bem-vindo(a) ao Suma',
-      subtitle: 'Antes de começar, qual unidade você prefere usar para acompanhar seu peso?',
+      title: 'Unidade de peso',
+      subtitle: 'Qual unidade você prefere usar para acompanhar seu peso?',
       child: Row(
         children: [
           Expanded(child: _UnitCard(label: 'Quilos', suffix: 'kg', selected: unitPref == 'kg', onTap: () => onChanged('kg'))),

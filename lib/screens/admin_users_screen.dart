@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/user.dart';
+import '../models/profile.dart';
 import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/suma_widgets.dart';
-import 'user_form_dialog.dart';
 
-/// Admin-only tab: create/manage every other account, reset passwords, and
-/// export any single user's (or every user's) CSV history.
+/// Admin-only tab: view every member of the family network and export
+/// their CSV history (read-only - each person only ever edits their own
+/// data; the admin can remove someone from the network, but never their
+/// account, which they don't control).
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -20,57 +21,36 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _exportingAll = false;
 
-  Future<void> _exportUser(AppUser user) async {
+  Future<void> _exportMember(Profile member) async {
     final appState = context.read<AppState>();
-    final entries = await appState.entriesFor(user.id!);
-    final file = await CsvExportService.exportAndHandOff(user, entries);
+    final entries = await appState.entriesFor(member.id);
+    final file = await CsvExportService.exportAndHandOff(member, entries);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('CSV de ${user.name} salvo em: ${file.path}')),
+      SnackBar(content: Text('CSV de ${member.name} salvo em: ${file.path}')),
     );
   }
 
   Future<void> _exportAll() async {
     setState(() => _exportingAll = true);
     final appState = context.read<AppState>();
-    for (final user in appState.users) {
-      final entries = await appState.entriesFor(user.id!);
-      await CsvExportService.writeCsvFile(user, entries);
+    for (final member in appState.familyMembers) {
+      final entries = await appState.entriesFor(member.id);
+      await CsvExportService.writeCsvFile(member, entries);
     }
     if (!mounted) return;
     setState(() => _exportingAll = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Um CSV por usuário foi salvo na pasta Suma/exports.')),
+      const SnackBar(content: Text('Um CSV por membro foi salvo na pasta Suma/exports.')),
     );
   }
 
-  Future<void> _resetPassword(AppUser user) async {
-    final controller = TextEditingController();
-    final newPassword = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Redefinir senha de ${user.name}'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Nova senha'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Redefinir')),
-        ],
-      ),
-    );
-    if (newPassword == null || newPassword.length < 6) return;
-    if (!mounted) return;
-    await context.read<AppState>().resetPassword(user, newPassword);
-  }
-
-  Future<void> _deleteUser(AppUser user) async {
+  Future<void> _removeMember(Profile member) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remover conta?'),
-        content: Text('A conta de ${user.name} e todo o histórico de registros dela serão excluídos permanentemente.'),
+        title: const Text('Remover da rede?'),
+        content: Text('${member.name} deixará de fazer parte da sua rede familiar. A conta e o histórico dela continuam intactos - só param de ser visíveis para você.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remover')),
@@ -79,7 +59,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
     if (confirmed != true) return;
     if (!mounted) return;
-    final error = await context.read<AppState>().deleteManagedUser(user);
+    final error = await context.read<AppState>().removeFamilyMember(member.id);
     if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
@@ -89,64 +69,68 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final users = appState.users;
+    final members = appState.familyMembers;
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Usuários'),
+        title: Text(appState.currentFamily?.name ?? 'Usuários'),
         actions: [
-          IconButton(
-            tooltip: 'Exportar CSV de todos',
-            icon: _exportingAll
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.folder_zip_outlined),
-            onPressed: _exportingAll ? null : _exportAll,
-          ),
+          if (members.isNotEmpty)
+            IconButton(
+              tooltip: 'Exportar CSV de todos',
+              icon: _exportingAll
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.folder_zip_outlined),
+              onPressed: _exportingAll ? null : _exportAll,
+            ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => UserFormDialog.show(context),
-        icon: const Icon(Icons.person_add_alt),
-        label: const Text('Nova conta'),
-      ),
       body: ResponsiveBody(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final user in users) ...[
-              _UserCard(
-                user: user,
-                isSelf: user.id == appState.currentUser?.id,
-                scheme: scheme,
-                onExport: () => _exportUser(user),
-                onReset: () => _resetPassword(user),
-                onDelete: () => _deleteUser(user),
+        child: members.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.only(top: 48),
+                child: Center(
+                  child: Text(
+                    'Só você está nessa rede por enquanto.\nCompartilhe o código de convite em Ajustes.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final member in members) ...[
+                    _MemberCard(
+                      member: member,
+                      isSelf: member.id == appState.currentProfile?.id,
+                      scheme: scheme,
+                      onExport: () => _exportMember(member),
+                      onRemove: () => _removeMember(member),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
               ),
-              const SizedBox(height: 10),
-            ],
-          ],
-        ),
       ),
     );
   }
 }
 
-class _UserCard extends StatelessWidget {
-  final AppUser user;
+class _MemberCard extends StatelessWidget {
+  final Profile member;
   final bool isSelf;
   final ColorScheme scheme;
   final VoidCallback onExport;
-  final VoidCallback onReset;
-  final VoidCallback onDelete;
+  final VoidCallback onRemove;
 
-  const _UserCard({
-    required this.user,
+  const _MemberCard({
+    required this.member,
     required this.isSelf,
     required this.scheme,
     required this.onExport,
-    required this.onReset,
-    required this.onDelete,
+    required this.onRemove,
   });
 
   @override
@@ -157,7 +141,7 @@ class _UserCard extends StatelessWidget {
           CircleAvatar(
             backgroundColor: scheme.primary.withValues(alpha: 0.16),
             child: Text(
-              user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase(),
+              member.name.trim().isEmpty ? '?' : member.name.trim()[0].toUpperCase(),
               style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800),
             ),
           ),
@@ -166,13 +150,13 @@ class _UserCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                Text(member.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text('@${user.username}${isSelf ? ' · você' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                Text('${member.email ?? ''}${isSelf ? ' · você' : ''}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
               ],
             ),
           ),
-          Pill(text: user.isAdmin ? 'Admin' : 'Usuário', color: user.isAdmin ? AppColors.goalAccent : scheme.primary),
+          Pill(text: member.isAdmin ? 'Admin' : 'Membro', color: member.isAdmin ? AppColors.goalAccent : scheme.primary),
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -180,18 +164,14 @@ class _UserCard extends StatelessWidget {
                 case 'export':
                   onExport();
                   break;
-                case 'reset':
-                  onReset();
-                  break;
-                case 'delete':
-                  onDelete();
+                case 'remove':
+                  onRemove();
                   break;
               }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'export', child: Text('Exportar CSV')),
-              const PopupMenuItem(value: 'reset', child: Text('Redefinir senha')),
-              PopupMenuItem(value: 'delete', enabled: !isSelf, child: const Text('Remover conta')),
+              PopupMenuItem(value: 'remove', enabled: !isSelf, child: const Text('Remover da rede')),
             ],
           ),
         ],

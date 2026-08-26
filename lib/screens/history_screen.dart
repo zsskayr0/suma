@@ -32,7 +32,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final unitPref = appState.currentUser?.unitPref ?? 'kg';
+    final unitPref = appState.currentProfile?.unitPref ?? 'kg';
     final all = appState.entries; // date DESC, id DESC
 
     List<WeightEntry> filtered = all;
