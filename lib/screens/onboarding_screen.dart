@@ -48,6 +48,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _pageController.previousPage(duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
   }
 
+  /// Applies the theme choice live (same as Ajustes does after onboarding)
+  /// instead of only saving it silently for when [_finish] runs - otherwise
+  /// picking "Claro" here has no visible effect until the wizard is done.
+  void _onThemeChanged(String pref) {
+    setState(() => _themePref = pref);
+    context.read<AppState>().updateThemePref(pref);
+  }
+
   Future<void> _finish() async {
     setState(() => _saving = true);
     await context.read<AppState>().completeOnboarding(
@@ -123,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         onToggle: (v) => setState(() => _hasGoal = v),
                         onGoalChanged: (v) => setState(() => _goalWeightKg = v),
                       ),
-                      _ThemePage(themePref: _themePref, onChanged: (v) => setState(() => _themePref = v)),
+                      _ThemePage(themePref: _themePref, onChanged: _onThemeChanged),
                     ],
                   ),
                 ),

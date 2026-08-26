@@ -362,6 +362,8 @@ class Pill extends StatelessWidget {
 
 /// Centers page content and caps its width on wide desktop windows so the
 /// UI reads as "more desktop, less stretched-phone" per Suma's design goals.
+/// Always scrollable - callers can build a plain, non-scrolling `Column` and
+/// still be safe if the content ends up taller than the viewport.
 class ResponsiveBody extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -370,11 +372,13 @@ class ResponsiveBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
-        child: Padding(padding: padding, child: child),
+    return SingleChildScrollView(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: Responsive.maxContentWidth(context)),
+          child: Padding(padding: padding, child: child),
+        ),
       ),
     );
   }
