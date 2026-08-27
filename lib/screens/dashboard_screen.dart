@@ -204,7 +204,7 @@ class _EmptyDashboard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.monitor_weight_outlined, size: 64, color: scheme.outline),
+            Icon(Icons.monitor_weight, size: 64, color: scheme.outline),
             const SizedBox(height: 16),
             Text('Nenhum registro ainda', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 6),

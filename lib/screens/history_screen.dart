@@ -297,7 +297,7 @@ class _HistoryTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: (showOwner ? ownerColor : scheme.primary).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
-              child: Icon(Icons.monitor_weight_outlined, color: showOwner ? ownerColor : scheme.primary, size: 20),
+              child: Icon(Icons.monitor_weight, color: showOwner ? ownerColor : scheme.primary, size: 20),
             ),
             const SizedBox(width: 14),
             Expanded(
