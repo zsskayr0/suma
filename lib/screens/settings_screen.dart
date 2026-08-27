@@ -14,6 +14,7 @@ import '../utils/responsive.dart';
 import '../utils/units.dart';
 import '../widgets/goal_editor.dart';
 import '../widgets/qr_code_dialog.dart';
+import '../widgets/suma_glass_sheet.dart';
 import '../widgets/suma_widgets.dart';
 import 'qr_scan_screen.dart';
 
@@ -133,22 +134,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _editHeight() async {
     final appState = context.read<AppState>();
     final user = appState.currentProfile!;
-    final result = await showModalBottomSheet<double>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _EditHeightSheet(heightCm: user.heightCm ?? 170),
+    final result = await showSumaGlassSheet<_HeightEdit>(
+      context,
+      builder: (_) => _EditHeightSheet(heightCm: user.heightCm ?? 170, age: user.age ?? 30, sex: user.sex ?? 'unspecified'),
     );
     if (result == null) return;
-    await appState.updateHeight(result);
+    await appState.updateBodyProfile(heightCm: result.heightCm, age: result.age, sex: result.sex);
   }
 
   Future<void> _editGoal() async {
     final appState = context.read<AppState>();
     final user = appState.currentProfile!;
     final currentWeightKg = appState.entries.isNotEmpty ? appState.entries.first.weightKg : null;
-    final result = await showModalBottomSheet<_GoalEdit>(
-      context: context,
-      isScrollControlled: true,
+    final result = await showSumaGlassSheet<_GoalEdit>(
+      context,
       builder: (_) => _EditGoalSheet(
         hasGoal: user.goalWeightKg != null,
         goalType: user.goalType,
@@ -349,14 +348,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // (device-local), not the profile - this is the one preference on
           // this whole screen that deliberately doesn't follow the account
           // to another phone.
-          _ThemeOption(icon: Icons.smartphone_rounded, label: 'Sistema', value: 'system', selected: appState.themePref, onSelected: appState.updateThemePref),
+          _OptionRow(icon: Icons.smartphone_rounded, label: 'Sistema', value: 'system', selected: appState.themePref, onSelected: appState.updateThemePref),
           const SizedBox(height: 8),
-          _ThemeOption(icon: Icons.light_mode_outlined, label: 'Claro', value: 'light', selected: appState.themePref, onSelected: appState.updateThemePref),
+          _OptionRow(icon: Icons.light_mode_outlined, label: 'Claro', value: 'light', selected: appState.themePref, onSelected: appState.updateThemePref),
           const SizedBox(height: 8),
-          _ThemeOption(icon: Icons.dark_mode_outlined, label: 'Escuro', value: 'dark', selected: appState.themePref, onSelected: appState.updateThemePref),
+          _OptionRow(icon: Icons.dark_mode_outlined, label: 'Escuro', value: 'dark', selected: appState.themePref, onSelected: appState.updateThemePref),
         ],
       ),
     );
+
+    final heightSummaryParts = [
+      if (user.heightCm != null) '${user.heightCm!.toStringAsFixed(0)} cm',
+      if (user.age != null) '${user.age} anos',
+      if (user.sex != null && user.sex != 'unspecified') (user.sex == 'male' ? 'Masculino' : 'Feminino'),
+    ];
 
     final heightCard = SumaCard(
       onTap: _editHeight,
@@ -366,10 +371,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Altura', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
                 Text(
-                  user.heightCm != null ? '${user.heightCm!.toStringAsFixed(0)} cm' : 'Não definida',
+                  heightSummaryParts.isEmpty ? 'Não definido' : heightSummaryParts.join(' · '),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
@@ -557,9 +560,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+class _HeightEdit {
+  final double heightCm;
+  final int age;
+  final String sex;
+  const _HeightEdit({required this.heightCm, required this.age, required this.sex});
+}
+
 class _EditHeightSheet extends StatefulWidget {
   final double heightCm;
-  const _EditHeightSheet({required this.heightCm});
+  final int age;
+  final String sex;
+  const _EditHeightSheet({required this.heightCm, required this.age, required this.sex});
 
   @override
   State<_EditHeightSheet> createState() => _EditHeightSheetState();
@@ -567,38 +579,70 @@ class _EditHeightSheet extends StatefulWidget {
 
 class _EditHeightSheetState extends State<_EditHeightSheet> {
   late double _heightCm = widget.heightCm;
+  late int _age = widget.age;
+  late String _sex = widget.sex;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Altura', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          SumaCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(text: _heightCm.toStringAsFixed(0), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurface)),
-                        TextSpan(text: ' cm', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                      ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Altura, idade e sexo', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            SumaCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(text: _heightCm.toStringAsFixed(0), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, color: scheme.onSurface)),
+                          TextSpan(text: ' cm', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Slider(value: _heightCm, min: 100, max: 230, onChanged: (v) => setState(() => _heightCm = v)),
-              ],
+                  Slider(value: _heightCm, min: 100, max: 230, onChanged: (v) => setState(() => _heightCm = v)),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(onPressed: () => Navigator.of(context).pop(_heightCm), child: const Text('Salvar')),
-        ],
+            const SizedBox(height: 16),
+            StepperField(
+              label: 'Idade',
+              value: _age.toDouble(),
+              unit: 'anos',
+              step: 1,
+              min: 1,
+              max: 120,
+              decimals: 0,
+              onChanged: (v) => setState(() => _age = v.round()),
+            ),
+            const SizedBox(height: 16),
+            Text('Sexo', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            // Plain (unsuffixed) glyphs, not _rounded - those live at newer,
+            // higher codepoints this bundled icon font doesn't actually
+            // have (same issue monitor_weight_outlined had: it renders
+            // blank, not missing-at-compile-time, so nothing catches it
+            // except actually looking at the screen).
+            _OptionRow(icon: Icons.male, label: 'Masculino', value: 'male', selected: _sex, onSelected: (v) => setState(() => _sex = v)),
+            const SizedBox(height: 8),
+            _OptionRow(icon: Icons.female, label: 'Feminino', value: 'female', selected: _sex, onSelected: (v) => setState(() => _sex = v)),
+            const SizedBox(height: 8),
+            _OptionRow(icon: Icons.person_outline_rounded, label: 'Prefiro não informar', value: 'unspecified', selected: _sex, onSelected: (v) => setState(() => _sex = v)),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(_HeightEdit(heightCm: _heightCm, age: _age, sex: _sex)),
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -721,16 +765,17 @@ class _EditGoalSheetState extends State<_EditGoalSheet> {
   }
 }
 
-/// One row of the "Aparência" list - a full-width tappable option instead of
-/// a segment sharing horizontal space with two others.
-class _ThemeOption extends StatelessWidget {
+/// A full-width tappable option row instead of a segment sharing horizontal
+/// space with the others - used for "Aparência" (Sistema/Claro/Escuro) and
+/// "Sexo" (Masculino/Feminino/Prefiro não informar).
+class _OptionRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final String selected;
   final ValueChanged<String> onSelected;
 
-  const _ThemeOption({required this.icon, required this.label, required this.value, required this.selected, required this.onSelected});
+  const _OptionRow({required this.icon, required this.label, required this.value, required this.selected, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {

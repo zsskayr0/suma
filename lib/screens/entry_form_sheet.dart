@@ -224,7 +224,8 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                 style: valueStyle,
                 cursorColor: scheme.primary,
                 decoration: _fieldDecoration(context, label: 'Notas - opcional', icon: HeroIcons.documentText),
-                maxLines: 2,
+                minLines: 1,
+                maxLines: null,
               ),
               const SizedBox(height: 22),
               FilledButton.icon(

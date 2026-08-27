@@ -17,6 +17,8 @@ class Profile {
   final String? avatarUrl;
   final String role; // 'admin' or 'member'
   final double? heightCm;
+  final int? age;
+  final String? sex; // 'male', 'female' or 'unspecified'
   final double? goalWeightKg;
   final String goalType; // 'lose' or 'gain'
   final double? goalStartWeightKg; // snapshot of current weight when the goal was last set
@@ -32,6 +34,8 @@ class Profile {
     this.avatarUrl,
     this.role = 'admin',
     this.heightCm,
+    this.age,
+    this.sex,
     this.goalWeightKg,
     this.goalType = 'lose',
     this.goalStartWeightKg,
@@ -65,6 +69,8 @@ class Profile {
     String? role,
     double? heightCm,
     bool clearHeight = false,
+    int? age,
+    String? sex,
     double? goalWeightKg,
     bool clearGoal = false,
     String? goalType,
@@ -80,6 +86,8 @@ class Profile {
       avatarUrl: clearAvatar ? null : (avatarUrl ?? this.avatarUrl),
       role: role ?? this.role,
       heightCm: clearHeight ? null : (heightCm ?? this.heightCm),
+      age: age ?? this.age,
+      sex: sex ?? this.sex,
       goalWeightKg: clearGoal ? null : (goalWeightKg ?? this.goalWeightKg),
       goalType: clearGoal ? this.goalType : (goalType ?? this.goalType),
       goalStartWeightKg: clearGoal ? null : (goalStartWeightKg ?? this.goalStartWeightKg),
@@ -98,6 +106,8 @@ class Profile {
       avatarUrl: map['avatar_url'] as String?,
       role: map['role'] as String? ?? 'admin',
       heightCm: _toDouble(map['height_cm']),
+      age: map['age'] as int?,
+      sex: map['sex'] as String?,
       goalWeightKg: _toDouble(map['goal_weight_kg']),
       goalType: map['goal_type'] as String? ?? 'lose',
       goalStartWeightKg: _toDouble(map['goal_start_weight_kg']),

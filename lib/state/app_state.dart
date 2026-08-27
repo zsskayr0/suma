@@ -323,9 +323,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> updateHeight(double heightCm) async {
-    await _client.from('profiles').update({'height_cm': heightCm}).eq('id', currentProfile!.id);
-    currentProfile = currentProfile!.copyWith(heightCm: heightCm);
+  /// Height, age and sex are edited together in the one "Altura" sheet, so
+  /// they're saved together too.
+  Future<void> updateBodyProfile({required double heightCm, required int age, required String sex}) async {
+    await _client.from('profiles').update({'height_cm': heightCm, 'age': age, 'sex': sex}).eq('id', currentProfile!.id);
+    currentProfile = currentProfile!.copyWith(heightCm: heightCm, age: age, sex: sex);
     notifyListeners();
   }
 
