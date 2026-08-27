@@ -17,8 +17,9 @@ import '../widgets/qr_code_dialog.dart';
 import '../widgets/suma_widgets.dart';
 import 'qr_scan_screen.dart';
 
-/// "Ajustes" tab: preferences (unit, theme, height, goal weight), family
-/// network management, account actions (export, password) and sign-out.
+/// "Perfil" tab: profile card, preferences (unit, theme, height, goal
+/// weight), family network management, account actions (export, password)
+/// and sign-out.
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onOpenUsers;
 
@@ -476,7 +477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes')),
+      appBar: AppBar(title: const Text('Perfil')),
       body: ResponsiveBody(
         child: wide
             ? Column(

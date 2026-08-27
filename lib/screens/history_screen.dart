@@ -145,11 +145,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Histórico')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => EntryFormSheet.show(context),
-        tooltip: 'Novo registro',
-        child: const Icon(Icons.add),
-      ),
+      // The "+" to register a weight is universal now - the floating pill
+      // nav's raised center button (mobile) / the rail's button (desktop) -
+      // so there's no FAB here anymore.
       body: !hasAnyData
           ? Center(
               child: Text('Nenhum registro ainda', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),

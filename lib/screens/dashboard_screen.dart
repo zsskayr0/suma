@@ -34,20 +34,10 @@ class DashboardScreen extends StatelessWidget {
     final last30 = entries.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).toList().reversed.toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Olá, ${user.firstName} 👋'),
-        actions: [
-          IconButton(
-            tooltip: 'Novo registro',
-            onPressed: () => EntryFormSheet.show(context),
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-      // The "+" to register a weight only floats as a FAB in Histórico - here
-      // on Hoje it stays a small icon in the corner (see the appBar action
-      // above), so there's only one prominent "add" affordance per screen.
+      appBar: AppBar(title: Text('Olá, ${user.firstName} 👋')),
+      // The "+" to register a weight is universal now - the floating pill
+      // nav's raised center button (mobile) / the rail's button (desktop) -
+      // so there's no per-screen add affordance here anymore.
       body: entries.isEmpty
           ? const _EmptyDashboard()
           : ResponsiveBody(
