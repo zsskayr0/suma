@@ -435,25 +435,45 @@ class AppState extends ChangeNotifier {
   }
 
   /// How many family members logged an entry on each of the last [days] days
-  /// - the data behind the admin-only contribution heatmap on Hoje. One
-  /// query across every member (RLS already lets an admin read their whole
-  /// family's weight_entries) instead of one round-trip per person.
+  /// - the data behind the contribution heatmap on Usuários. Goes through
+  /// the `family_contribution_counts` RPC (SECURITY DEFINER) instead of a
+  /// direct `weight_entries` select, so every member can see this - the
+  /// function only ever returns day/count pairs, never whose entry it was
+  /// or what they weighed.
   Future<Map<DateTime, int>> familyContributionCounts({int days = 126}) async {
     if (familyMembers.isEmpty) return {};
-    final memberIds = familyMembers.map((m) => m.id).toList();
-    final since = DateTime.now().subtract(Duration(days: days));
-    final sinceDate = '${since.year.toString().padLeft(4, '0')}-${since.month.toString().padLeft(2, '0')}-${since.day.toString().padLeft(2, '0')}';
-    final rows = await _client
-        .from('weight_entries')
-        .select('date, user_id')
-        .inFilter('user_id', memberIds)
-        .gte('date', sinceDate);
+    final rows = await _client.rpc('family_contribution_counts', params: {'days': days});
     final counts = <DateTime, int>{};
-    for (final r in rows) {
-      final d = DateTime.parse(r['date'] as String);
+    for (final r in rows as List) {
+      final d = DateTime.parse(r['entry_date'] as String);
       final key = DateTime(d.year, d.month, d.day);
-      counts[key] = (counts[key] ?? 0) + 1;
+      counts[key] = (r['cnt'] as num).toInt();
     }
     return counts;
+  }
+
+  /// Ranks every family member who has a goal set by how close they are to
+  /// it, as a 0..1 fraction - via the `family_goal_progress` RPC, which
+  /// computes the percentage server-side and never returns anyone's actual
+  /// weight. Available to any member, not just the admin.
+  Future<List<({String id, String name, double progress})>> familyGoalProgress() async {
+    if (familyMembers.isEmpty) return [];
+    final rows = await _client.rpc('family_goal_progress');
+    return [
+      for (final r in rows as List)
+        (id: r['member_id'] as String, name: r['member_name'] as String, progress: (r['progress'] as num).toDouble()),
+    ];
+  }
+
+  /// Registro counts (last [days] days and all-time) for every member of
+  /// the family, via the `family_entry_counts` RPC - counts only, never the
+  /// underlying dates/weights. Available to any member, not just the admin.
+  Future<Map<String, ({int total, int recent})>> familyEntryCounts({int days = 60}) async {
+    if (familyMembers.isEmpty) return {};
+    final rows = await _client.rpc('family_entry_counts', params: {'days': days});
+    return {
+      for (final r in rows as List)
+        r['member_id'] as String: (total: (r['total_count'] as num).toInt(), recent: (r['recent_count'] as num).toInt()),
+    };
   }
 }

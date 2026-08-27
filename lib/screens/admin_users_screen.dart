@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/entry.dart';
 import '../models/profile.dart';
 import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
-import '../utils/goal_trend.dart';
 import '../widgets/family_heatmap.dart';
 import '../widgets/suma_widgets.dart';
 
-/// "Usuários" tab: everyone in the family network can see who else is in
-/// it (name, photo, role) - but the weight data behind the goal-proximity
-/// ranking, the contribution heatmap, the per-member registro counts and
-/// the CSV export/remove actions stay admin-only, both in this UI and
-/// (more importantly) enforced server-side by RLS on `weight_entries` -
-/// a member simply can't read another member's measurements no matter
-/// what this screen shows or hides.
+/// "Usuários" tab: the same screen for everyone in the family network -
+/// who's in it (name, photo, role), the goal-proximity ranking and the
+/// contribution heatmap are all visible to any member, not just the admin.
+/// Those two only ever show a percentage/count, computed server-side by a
+/// SECURITY DEFINER RPC that never returns anyone's actual weight - a
+/// regular member still can't read another member's raw `weight_entries`
+/// row (that stays admin-only, enforced by RLS, not just hidden here).
+/// What *is* still admin-only here: exporting someone else's full CSV and
+/// removing a member from the network - both need either the raw data or
+/// real authority over the network, not just an aggregate view of it.
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -26,8 +27,9 @@ class AdminUsersScreen extends StatefulWidget {
 
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _exportingAll = false;
-  bool _loadingEntries = false;
-  final Map<String, List<WeightEntry>> _entriesByMember = {};
+  bool _loadingAggregates = false;
+  Map<String, ({int total, int recent})> _entryCounts = {};
+  List<({String id, String name, double progress})> _goalProgress = [];
 
   @override
   void initState() {
@@ -38,26 +40,20 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   Future<void> _load() async {
     final appState = context.read<AppState>();
     await appState.refreshFamilyMembers();
-    if (!mounted) return;
-    // Only the admin can actually read anyone else's weight_entries (RLS
-    // blocks a regular member's read outright) - skip the fetch entirely
-    // for a non-admin instead of firing requests that'll just come back
-    // empty.
-    if (!appState.currentProfile!.isAdmin) return;
-    setState(() => _loadingEntries = true);
-    final members = appState.familyMembers;
-    final lists = await Future.wait(members.map((m) => appState.entriesFor(m.id)));
+    if (!mounted || appState.familyMembers.length <= 1) return;
+    setState(() => _loadingAggregates = true);
+    final counts = await appState.familyEntryCounts();
+    final progress = await appState.familyGoalProgress();
     if (!mounted) return;
     setState(() {
-      for (var i = 0; i < members.length; i++) {
-        _entriesByMember[members[i].id] = lists[i];
-      }
-      _loadingEntries = false;
+      _entryCounts = counts;
+      _goalProgress = progress;
+      _loadingAggregates = false;
     });
   }
 
   Future<void> _exportMember(Profile member) async {
-    final entries = _entriesByMember[member.id] ?? await context.read<AppState>().entriesFor(member.id);
+    final entries = await context.read<AppState>().entriesFor(member.id);
     final file = await CsvExportService.exportAndHandOff(member, entries);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -69,7 +65,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     setState(() => _exportingAll = true);
     final appState = context.read<AppState>();
     for (final member in appState.familyMembers) {
-      final entries = _entriesByMember[member.id] ?? await appState.entriesFor(member.id);
+      final entries = await appState.entriesFor(member.id);
       await CsvExportService.writeCsvFile(member, entries);
     }
     if (!mounted) return;
@@ -106,6 +102,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final members = appState.familyMembers;
     final scheme = Theme.of(context).colorScheme;
     final isAdmin = appState.currentProfile?.isAdmin ?? false;
+    final showAggregates = members.length > 1;
 
     return Scaffold(
       appBar: AppBar(
@@ -136,19 +133,20 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (isAdmin) ...[
-                    _GoalProximityCard(members: members, entriesByMember: _entriesByMember, loading: _loadingEntries),
-                    if (members.length > 1) ...[const SizedBox(height: 14), const FamilyHeatmap()],
+                  if (showAggregates) ...[
+                    _GoalProximityCard(ranking: _goalProgress, loading: _loadingAggregates),
                     const SizedBox(height: 14),
-                    const SectionLabel('Membros'),
+                    const FamilyHeatmap(),
+                    const SizedBox(height: 14),
                   ],
+                  const SectionLabel('Membros'),
                   for (final member in members) ...[
                     _MemberCard(
                       member: member,
                       isSelf: member.id == appState.currentProfile?.id,
                       isAdmin: isAdmin,
-                      entries: _entriesByMember[member.id],
-                      loading: _loadingEntries,
+                      counts: _entryCounts[member.id],
+                      loading: _loadingAggregates,
                       scheme: scheme,
                       onExport: () => _exportMember(member),
                       onRemove: () => _removeMember(member),
@@ -164,27 +162,19 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
 /// Ranks every member who has a goal set by how close they are to it - as a
 /// percentage only, never the raw weights, so this stays comfortable to
-/// look at for people who'd rather not broadcast actual numbers.
+/// look at for people who'd rather not broadcast actual numbers. Computed
+/// server-side (see `family_goal_progress` RPC), so this is safe to show
+/// to any member, not just the admin.
 class _GoalProximityCard extends StatelessWidget {
-  final List<Profile> members;
-  final Map<String, List<WeightEntry>> entriesByMember;
+  final List<({String id, String name, double progress})> ranking;
   final bool loading;
 
-  const _GoalProximityCard({required this.members, required this.entriesByMember, required this.loading});
+  const _GoalProximityCard({required this.ranking, required this.loading});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final ranked = <MapEntry<Profile, double>>[];
-    for (final m in members) {
-      final goal = m.goalWeightKg;
-      final list = entriesByMember[m.id];
-      if (goal == null || list == null || list.isEmpty) continue;
-      final start = m.goalStartWeightKg ?? list.last.weightKg;
-      final progress = goalProgressFraction(currentKg: list.first.weightKg, startKg: start, goalWeightKg: goal);
-      ranked.add(MapEntry(m, progress));
-    }
-    ranked.sort((a, b) => b.value.compareTo(a.value));
+    final ranked = [...ranking]..sort((a, b) => b.progress.compareTo(a.progress));
 
     return SumaCard(
       child: Column(
@@ -204,7 +194,7 @@ class _GoalProximityCard extends StatelessWidget {
             Text('Ninguém definiu uma meta de peso ainda.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant))
           else
             for (final r in ranked) ...[
-              _ProximityRow(name: r.key.name, progress: r.value),
+              _ProximityRow(name: r.name, progress: r.progress),
               const SizedBox(height: 12),
             ],
         ],
@@ -244,7 +234,7 @@ class _MemberCard extends StatelessWidget {
   final Profile member;
   final bool isSelf;
   final bool isAdmin;
-  final List<WeightEntry>? entries;
+  final ({int total, int recent})? counts;
   final bool loading;
   final ColorScheme scheme;
   final VoidCallback onExport;
@@ -254,7 +244,7 @@ class _MemberCard extends StatelessWidget {
     required this.member,
     required this.isSelf,
     required this.isAdmin,
-    required this.entries,
+    required this.counts,
     required this.loading,
     required this.scheme,
     required this.onExport,
@@ -263,18 +253,12 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final list = entries;
     String stats = '';
-    // Registro counts come from weight_entries, which only the admin can
-    // read for someone else - a regular member just sees name/foto/papel.
-    if (isAdmin) {
-      if (list == null) {
-        stats = loading ? 'Carregando registros...' : '';
-      } else {
-        final cutoff = DateTime.now().subtract(const Duration(days: 60));
-        final last60 = list.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).length;
-        stats = '$last60 registro${last60 == 1 ? '' : 's'} nos últimos 60 dias · ${list.length} no total';
-      }
+    if (counts != null) {
+      final c = counts!;
+      stats = '${c.recent} registro${c.recent == 1 ? '' : 's'} nos últimos 60 dias · ${c.total} no total';
+    } else if (loading) {
+      stats = 'Carregando registros...';
     }
 
     return SumaCard(

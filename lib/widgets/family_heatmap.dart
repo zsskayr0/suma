@@ -11,11 +11,13 @@ const _monthNames = [
 ];
 const _weekdayLetters = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D']; // Mon..Sun
 
-/// Admin-only, GitHub-style contribution grid: one cell per day, colored by
-/// how many family members logged a weight that day. Lives on the Usuários
-/// tab, below the goal-proximity ranking - only rendered when there's more
-/// than one person in the family (a single-person family has nothing to
-/// compare).
+/// GitHub-style contribution grid: one cell per day, colored by how many
+/// family members logged a weight that day - counts only, via a
+/// SECURITY DEFINER RPC that never exposes whose entry it was or what they
+/// weighed, so it's safe to show to any member, not just the admin. Lives
+/// on the Usuários tab, below the goal-proximity ranking - only rendered
+/// when there's more than one person in the family (a single-person family
+/// has nothing to compare).
 class FamilyHeatmap extends StatefulWidget {
   const FamilyHeatmap({super.key});
 
