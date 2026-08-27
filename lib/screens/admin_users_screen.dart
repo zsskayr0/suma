@@ -10,12 +10,13 @@ import '../utils/goal_trend.dart';
 import '../widgets/family_heatmap.dart';
 import '../widgets/suma_widgets.dart';
 
-/// Admin-only tab: view every member of the family network and export
-/// their CSV history (read-only - each person only ever edits their own
-/// data; the admin can remove someone from the network, but never their
-/// account, which they don't control). RLS on the backend already blocks a
-/// non-admin from reading anyone else's rows - this screen is simply never
-/// offered to them (see [HomeScreen]'s `showFamilyTab`).
+/// "Usuários" tab: everyone in the family network can see who else is in
+/// it (name, photo, role) - but the weight data behind the goal-proximity
+/// ranking, the contribution heatmap, the per-member registro counts and
+/// the CSV export/remove actions stay admin-only, both in this UI and
+/// (more importantly) enforced server-side by RLS on `weight_entries` -
+/// a member simply can't read another member's measurements no matter
+/// what this screen shows or hides.
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -38,6 +39,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final appState = context.read<AppState>();
     await appState.refreshFamilyMembers();
     if (!mounted) return;
+    // Only the admin can actually read anyone else's weight_entries (RLS
+    // blocks a regular member's read outright) - skip the fetch entirely
+    // for a non-admin instead of firing requests that'll just come back
+    // empty.
+    if (!appState.currentProfile!.isAdmin) return;
     setState(() => _loadingEntries = true);
     final members = appState.familyMembers;
     final lists = await Future.wait(members.map((m) => appState.entriesFor(m.id)));
@@ -99,12 +105,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final appState = context.watch<AppState>();
     final members = appState.familyMembers;
     final scheme = Theme.of(context).colorScheme;
+    final isAdmin = appState.currentProfile?.isAdmin ?? false;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(appState.currentFamily?.name ?? 'Usuários'),
         actions: [
-          if (members.isNotEmpty)
+          if (isAdmin && members.isNotEmpty)
             IconButton(
               tooltip: 'Exportar CSV de todos',
               icon: _exportingAll
@@ -129,14 +136,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _GoalProximityCard(members: members, entriesByMember: _entriesByMember, loading: _loadingEntries),
-                  if (members.length > 1) ...[const SizedBox(height: 14), const FamilyHeatmap()],
-                  const SizedBox(height: 14),
-                  const SectionLabel('Membros'),
+                  if (isAdmin) ...[
+                    _GoalProximityCard(members: members, entriesByMember: _entriesByMember, loading: _loadingEntries),
+                    if (members.length > 1) ...[const SizedBox(height: 14), const FamilyHeatmap()],
+                    const SizedBox(height: 14),
+                    const SectionLabel('Membros'),
+                  ],
                   for (final member in members) ...[
                     _MemberCard(
                       member: member,
                       isSelf: member.id == appState.currentProfile?.id,
+                      isAdmin: isAdmin,
                       entries: _entriesByMember[member.id],
                       loading: _loadingEntries,
                       scheme: scheme,
@@ -233,6 +243,7 @@ class _ProximityRow extends StatelessWidget {
 class _MemberCard extends StatelessWidget {
   final Profile member;
   final bool isSelf;
+  final bool isAdmin;
   final List<WeightEntry>? entries;
   final bool loading;
   final ColorScheme scheme;
@@ -242,6 +253,7 @@ class _MemberCard extends StatelessWidget {
   const _MemberCard({
     required this.member,
     required this.isSelf,
+    required this.isAdmin,
     required this.entries,
     required this.loading,
     required this.scheme,
@@ -252,13 +264,17 @@ class _MemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final list = entries;
-    String stats;
-    if (list == null) {
-      stats = loading ? 'Carregando registros...' : '';
-    } else {
-      final cutoff = DateTime.now().subtract(const Duration(days: 60));
-      final last60 = list.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).length;
-      stats = '$last60 registro${last60 == 1 ? '' : 's'} nos últimos 60 dias · ${list.length} no total';
+    String stats = '';
+    // Registro counts come from weight_entries, which only the admin can
+    // read for someone else - a regular member just sees name/foto/papel.
+    if (isAdmin) {
+      if (list == null) {
+        stats = loading ? 'Carregando registros...' : '';
+      } else {
+        final cutoff = DateTime.now().subtract(const Duration(days: 60));
+        final last60 = list.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).length;
+        stats = '$last60 registro${last60 == 1 ? '' : 's'} nos últimos 60 dias · ${list.length} no total';
+      }
     }
 
     return SumaCard(
@@ -281,23 +297,25 @@ class _MemberCard extends StatelessWidget {
             ),
           ),
           Pill(text: member.isAdmin ? 'Admin' : 'Membro', color: member.isAdmin ? AppColors.goalAccent : scheme.primary),
-          const SizedBox(width: 4),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'export':
-                  onExport();
-                  break;
-                case 'remove':
-                  onRemove();
-                  break;
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'export', child: Text('Exportar CSV')),
-              PopupMenuItem(value: 'remove', enabled: !isSelf, child: const Text('Remover da rede')),
-            ],
-          ),
+          if (isAdmin) ...[
+            const SizedBox(width: 4),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'export':
+                    onExport();
+                    break;
+                  case 'remove':
+                    onRemove();
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'export', child: Text('Exportar CSV')),
+                PopupMenuItem(value: 'remove', enabled: !isSelf, child: const Text('Remover da rede')),
+              ],
+            ),
+          ],
         ],
       ),
     );

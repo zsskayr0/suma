@@ -83,6 +83,62 @@ class UserAvatar extends StatelessWidget {
   }
 }
 
+/// A pill-shaped switcher with an animated sliding selected background - the
+/// same "Login/Cadastro" tab pattern from the auth screens, reused wherever
+/// a small set (2-3) of mutually-exclusive options needs picking without the
+/// heavier stock [SegmentedButton] look.
+class PillSwitcher<T> extends StatelessWidget {
+  final List<T> values;
+  final List<String> labels;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
+  const PillSwitcher({super.key, required this.values, required this.labels, required this.selected, required this.onChanged}) : assert(values.length == labels.length);
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < values.length; i++)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(values[i]),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: values[i] == selected ? (Theme.of(context).cardTheme.color ?? scheme.surface) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                    boxShadow: values[i] == selected
+                        ? [BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.4 : 0.08), blurRadius: 6, offset: const Offset(0, 2))]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: values[i] == selected ? scheme.primary : scheme.onSurfaceVariant,
+                      fontWeight: values[i] == selected ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Small-caps-ish section title used above groups of cards, e.g. "PREFERÊNCIAS".
 class SectionLabel extends StatelessWidget {
   final String text;

@@ -68,7 +68,7 @@ class AppState extends ChangeNotifier {
 
     await _loadFamilyInfo();
     await _loadEntries();
-    if (currentProfile!.isAdmin && currentProfile!.inFamily) {
+    if (currentProfile!.inFamily) {
       await _loadFamilyMembers();
     } else {
       familyMembers = [];
@@ -95,9 +95,12 @@ class AppState extends ChangeNotifier {
 
   /// Re-fetches the family member list (there's no realtime subscription,
   /// so this is how screens pick up someone else having joined/left since
-  /// this session started - call it on pull-to-refresh or tab entry).
+  /// this session started - call it on pull-to-refresh or tab entry). Any
+  /// member of the family can see who else is in it (name/photo/role) -
+  /// only the weight data itself stays admin-only, enforced by RLS on
+  /// `weight_entries`, not by hiding the member list.
   Future<void> refreshFamilyMembers() async {
-    if (!(currentProfile?.isAdmin ?? false) || !(currentProfile?.inFamily ?? false)) {
+    if (!(currentProfile?.inFamily ?? false)) {
       familyMembers = [];
       notifyListeners();
       return;
@@ -201,7 +204,7 @@ class AppState extends ChangeNotifier {
     final row = await _client.from('profiles').select().eq('id', uid).single();
     currentProfile = Profile.fromMap(row, email: currentProfile?.email);
     await _loadFamilyInfo();
-    if (currentProfile!.isAdmin && currentProfile!.inFamily) {
+    if (currentProfile!.inFamily) {
       await _loadFamilyMembers();
     }
     notifyListeners();

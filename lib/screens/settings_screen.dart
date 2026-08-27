@@ -334,13 +334,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Text('Unidade de peso', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 10),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'kg', label: Text('Quilos (kg)')),
-              ButtonSegment(value: 'lb', label: Text('Libras (lb)')),
-            ],
-            selected: {user.unitPref},
-            onSelectionChanged: (s) => appState.updateUnitPref(s.first),
+          PillSwitcher<String>(
+            values: const ['kg', 'lb'],
+            labels: const ['Quilos (kg)', 'Libras (lb)'],
+            selected: user.unitPref,
+            onChanged: appState.updateUnitPref,
           ),
           const SizedBox(height: 20),
           Text('Aparência', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),

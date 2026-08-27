@@ -33,7 +33,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final showFamilyTab = (appState.currentProfile?.isAdmin ?? false) && appState.currentFamily != null;
+    // Any member of the family sees the tab now, not just the admin - the
+    // screen itself adapts what it shows based on role (see
+    // AdminUsersScreen).
+    final showFamilyTab = appState.currentFamily != null;
 
     final items = <_NavItem>[
       _NavItem('Hoje', Icons.today_outlined, Icons.today_rounded, DashboardScreen(onViewHistory: () => _goTo(1))),
