@@ -52,6 +52,7 @@ class AuthLabeledField extends StatelessWidget {
   final String? Function(String?)? validator;
   final void Function(String)? onFieldSubmitted;
   final bool autocorrect;
+  final Iterable<String>? autofillHints;
 
   const AuthLabeledField({
     super.key,
@@ -64,6 +65,7 @@ class AuthLabeledField extends StatelessWidget {
     this.validator,
     this.onFieldSubmitted,
     this.autocorrect = true,
+    this.autofillHints,
   });
 
   @override
@@ -81,6 +83,7 @@ class AuthLabeledField extends StatelessWidget {
           obscureText: obscureText,
           keyboardType: keyboardType,
           autocorrect: autocorrect,
+          autofillHints: autofillHints,
           decoration: authFieldDecoration(context, label: hint, suffixIcon: suffixIcon),
           validator: validator,
           onFieldSubmitted: onFieldSubmitted,

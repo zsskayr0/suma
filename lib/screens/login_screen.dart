@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:heroicons/heroicons.dart';
 import 'package:provider/provider.dart';
 
@@ -45,6 +46,10 @@ class _LoginFormState extends State<LoginForm> {
       _submitting = false;
       _error = error;
     });
+    // Tells Android's autofill service (Proton Pass, Google, etc.) the
+    // login attempt is done - without this it never offers to save the
+    // credentials, even with autofillHints set on the fields.
+    TextInput.finishAutofillContext(shouldSave: error == null);
   }
 
   @override
@@ -52,7 +57,11 @@ class _LoginFormState extends State<LoginForm> {
     final textColor = authTextColor(context);
     return Form(
       key: _formKey,
-      child: Column(
+      // Groups the two fields as one login form for Android's autofill
+      // service - without it, hints on individual fields aren't enough to
+      // get a "save password?" prompt.
+      child: AutofillGroup(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -62,6 +71,7 @@ class _LoginFormState extends State<LoginForm> {
             hint: 'Seu e-mail',
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
+            autofillHints: const [AutofillHints.username, AutofillHints.email],
             onFieldSubmitted: (_) => _submit(),
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o e-mail' : null,
           ),
@@ -71,6 +81,7 @@ class _LoginFormState extends State<LoginForm> {
             controller: _passwordCtrl,
             hint: 'Senha',
             obscureText: _obscure,
+            autofillHints: const [AutofillHints.password],
             suffixIcon: IconButton(
               icon: HeroIcon(_obscure ? HeroIcons.eyeSlash : HeroIcons.eye, style: HeroIconStyle.outline, size: 18, color: authMutedTextColor(context)),
               onPressed: () => setState(() => _obscure = !_obscure),
@@ -149,6 +160,7 @@ class _LoginFormState extends State<LoginForm> {
             ),
           ],
         ],
+        ),
       ),
     );
   }

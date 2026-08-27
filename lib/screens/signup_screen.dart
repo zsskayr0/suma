@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:heroicons/heroicons.dart';
 import 'package:provider/provider.dart';
 
@@ -59,6 +60,12 @@ class _SignupFormState extends State<SignupForm> {
         _error = result;
       }
     });
+    // Same as login: tells Android's autofill service the attempt is done
+    // so it can offer to save the new credentials. A successful signup is
+    // either an immediate session (result == null) or "check your e-mail"
+    // (CONFIRM_EMAIL) - both mean this email/password pair is now real and
+    // worth saving.
+    TextInput.finishAutofillContext(shouldSave: result == null || result == 'CONFIRM_EMAIL');
   }
 
   @override
@@ -91,7 +98,8 @@ class _SignupFormState extends State<SignupForm> {
 
     return Form(
       key: _formKey,
-      child: Column(
+      child: AutofillGroup(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -99,6 +107,7 @@ class _SignupFormState extends State<SignupForm> {
             label: 'Nome completo',
             controller: _nameCtrl,
             hint: 'Seu nome',
+            autofillHints: const [AutofillHints.name],
             validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
           ),
           const SizedBox(height: 14),
@@ -108,6 +117,7 @@ class _SignupFormState extends State<SignupForm> {
             hint: 'exemplo@gmail.com',
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
+            autofillHints: const [AutofillHints.newUsername, AutofillHints.email],
             validator: (v) => (v == null || !v.contains('@')) ? 'Informe um e-mail válido' : null,
           ),
           const SizedBox(height: 14),
@@ -116,6 +126,7 @@ class _SignupFormState extends State<SignupForm> {
             controller: _passwordCtrl,
             hint: 'mínimo de 8 caracteres',
             obscureText: _obscure,
+            autofillHints: const [AutofillHints.newPassword],
             suffixIcon: IconButton(
               icon: HeroIcon(_obscure ? HeroIcons.eyeSlash : HeroIcons.eye, style: HeroIconStyle.outline, size: 18, color: authMutedTextColor(context)),
               onPressed: () => setState(() => _obscure = !_obscure),
@@ -128,6 +139,7 @@ class _SignupFormState extends State<SignupForm> {
             controller: _confirmCtrl,
             hint: 'repita a senha',
             obscureText: _obscure,
+            autofillHints: const [AutofillHints.newPassword],
             validator: (v) => (v != _passwordCtrl.text) ? 'As senhas não coincidem' : null,
           ),
           if (_error != null) ...[
@@ -176,6 +188,7 @@ class _SignupFormState extends State<SignupForm> {
             ),
           ],
         ],
+        ),
       ),
     );
   }

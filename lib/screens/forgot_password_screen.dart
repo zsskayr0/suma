@@ -94,6 +94,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           hint: 'Digite seu e-mail',
           keyboardType: TextInputType.emailAddress,
           autocorrect: false,
+          autofillHints: const [AutofillHints.username, AutofillHints.email],
           onFieldSubmitted: (_) => _submit(),
           validator: (v) => (v == null || !v.contains('@')) ? 'Informe um e-mail válido' : null,
         ),
