@@ -36,6 +36,17 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Names the built APK "suma-vX.Y.Z.apk" (the version from pubspec.yaml)
+    // instead of Gradle's generic "app-release.apk" - the file is meant to
+    // be shared/downloaded on its own (GitHub Releases, etc.), so it should
+    // say what it is on sight.
+    applicationVariants.all {
+        val variant = this
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
+            .forEach { output -> output.outputFileName = "suma-v${variant.versionName}.apk" }
+    }
 }
 
 kotlin {
