@@ -3,12 +3,18 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'suma_widgets.dart';
 
 class BottomNavEntry {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
-  const BottomNavEntry({required this.label, required this.icon, required this.selectedIcon});
+  // When set, this destination renders the person's profile photo (falling
+  // back to their initial) instead of [icon]/[selectedIcon] - used for the
+  // "Perfil" tab so it doubles as an avatar, matching the reference mockup.
+  final String? avatarName;
+  final String? avatarUrl;
+  const BottomNavEntry({required this.label, required this.icon, required this.selectedIcon, this.avatarName, this.avatarUrl});
 }
 
 /// Floating pill-shaped bottom nav (mobile only) - a raised circular "+" sits
@@ -49,7 +55,10 @@ class SumaBottomNav extends StatelessWidget {
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: (dark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.88),
+                    // 15% less opaque than the first pass - enough that the
+                    // blur behind it actually reads as glass instead of a
+                    // plain solid bar.
+                    color: (dark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.75),
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(color: scheme.outlineVariant.withValues(alpha: dark ? 0.3 : 0.5)),
                     boxShadow: [
@@ -84,6 +93,7 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final avatarName = entry.avatarName;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -92,11 +102,19 @@ class _NavButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-              child: Icon(selected ? entry.selectedIcon : entry.icon, key: ValueKey(selected), color: color, size: 22),
-            ),
+            if (avatarName != null)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.all(1.5),
+                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? scheme.primary : Colors.transparent, width: 1.6)),
+                child: UserAvatar(avatarUrl: entry.avatarUrl, name: avatarName, radius: 10),
+              )
+            else
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                child: Icon(selected ? entry.selectedIcon : entry.icon, key: ValueKey(selected), color: color, size: 22),
+              ),
             const SizedBox(height: 3),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),

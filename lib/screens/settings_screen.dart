@@ -105,6 +105,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Senha atualizada.')));
   }
 
+  Future<void> _pickAvatar() async {
+    final appState = context.read<AppState>();
+    final file = await FilePicker.pickFile(type: FileType.image);
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    final extension = (file.extension ?? 'jpg').toLowerCase();
+    final error = await appState.updateAvatar(bytes: bytes, extension: extension);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _editName() async {
+    final appState = context.read<AppState>();
+    final user = appState.currentProfile!;
+    final result = await showModalBottomSheet<_NameEdit>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _EditNameSheet(firstName: user.firstName, lastName: user.lastName),
+    );
+    if (result == null) return;
+    await appState.updateName(firstName: result.firstName, lastName: result.lastName);
+  }
+
   Future<void> _editHeight() async {
     final appState = context.read<AppState>();
     final user = appState.currentProfile!;
@@ -246,13 +271,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final profileCard = SumaCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 26,
-            backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
-            child: Text(
-              user.name.trim().isEmpty ? '?' : user.name.trim()[0].toUpperCase(),
-              style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 20),
+          InkWell(
+            borderRadius: BorderRadius.circular(100),
+            onTap: _pickAvatar,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                UserAvatar(avatarUrl: user.avatarUrl, name: user.name, radius: 26),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface, width: 2),
+                    ),
+                    child: const Icon(Icons.photo_camera_rounded, size: 12, color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 14),
@@ -260,8 +301,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Expanded(child: Text(user.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: _editName,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.edit_outlined, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
                 Text(user.email ?? '', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 // Below the email, not squeezed into the same row as the name -
                 // a long name + this pill side by side had no room to breathe.
@@ -545,6 +597,56 @@ class _EditHeightSheetState extends State<_EditHeightSheet> {
           ),
           const SizedBox(height: 20),
           FilledButton(onPressed: () => Navigator.of(context).pop(_heightCm), child: const Text('Salvar')),
+        ],
+      ),
+    );
+  }
+}
+
+class _NameEdit {
+  final String firstName;
+  final String lastName;
+  const _NameEdit({required this.firstName, required this.lastName});
+}
+
+class _EditNameSheet extends StatefulWidget {
+  final String firstName;
+  final String lastName;
+  const _EditNameSheet({required this.firstName, required this.lastName});
+
+  @override
+  State<_EditNameSheet> createState() => _EditNameSheetState();
+}
+
+class _EditNameSheetState extends State<_EditNameSheet> {
+  late final _firstCtrl = TextEditingController(text: widget.firstName);
+  late final _lastCtrl = TextEditingController(text: widget.lastName);
+
+  @override
+  void dispose() {
+    _firstCtrl.dispose();
+    _lastCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Nome', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          TextField(controller: _firstCtrl, decoration: const InputDecoration(labelText: 'Nome'), textCapitalization: TextCapitalization.words),
+          const SizedBox(height: 12),
+          TextField(controller: _lastCtrl, decoration: const InputDecoration(labelText: 'Sobrenome'), textCapitalization: TextCapitalization.words),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_NameEdit(firstName: _firstCtrl.text.trim(), lastName: _lastCtrl.text.trim())),
+            child: const Text('Salvar'),
+          ),
         ],
       ),
     );

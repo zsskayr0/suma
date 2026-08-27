@@ -54,6 +54,35 @@ class SumaCard extends StatelessWidget {
   }
 }
 
+/// A circular avatar showing the person's uploaded photo when they have
+/// one, falling back to their initial on a tinted background otherwise -
+/// used on the profile card, the admin member list and the "Perfil" nav
+/// destination.
+class UserAvatar extends StatelessWidget {
+  final String? avatarUrl;
+  final String name;
+  final double radius;
+
+  const UserAvatar({super.key, required this.avatarUrl, required this.name, this.radius = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final url = avatarUrl;
+    if (url != null && url.isNotEmpty) {
+      return CircleAvatar(radius: radius, backgroundColor: scheme.primary.withValues(alpha: 0.16), backgroundImage: NetworkImage(url));
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: scheme.primary.withValues(alpha: 0.16),
+      child: Text(
+        name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
+        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: radius * 0.72),
+      ),
+    );
+  }
+}
+
 /// Small-caps-ish section title used above groups of cards, e.g. "PREFERÊNCIAS".
 class SectionLabel extends StatelessWidget {
   final String text;

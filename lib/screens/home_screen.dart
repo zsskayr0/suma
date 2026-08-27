@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../utils/responsive.dart';
 import '../widgets/suma_bottom_nav.dart';
 import '../widgets/suma_mark.dart';
+import '../widgets/suma_widgets.dart';
 import 'admin_users_screen.dart';
 import 'dashboard_screen.dart';
 import 'entry_form_sheet.dart';
@@ -38,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _NavItem('Hoje', Icons.today_outlined, Icons.today_rounded, DashboardScreen(onViewHistory: () => _goTo(1))),
       _NavItem('Histórico', Icons.history_rounded, Icons.history_rounded, const HistoryScreen()),
       if (showFamilyTab) _NavItem('Usuários', Icons.group_outlined, Icons.group_rounded, const AdminUsersScreen()),
-      _NavItem('Perfil', Icons.person_outline_rounded, Icons.person_rounded, const SettingsScreen()),
+      _NavItem('Perfil', Icons.person_outline_rounded, Icons.person_rounded, const SettingsScreen(), isProfile: true),
     ];
 
     final safeIndex = _index >= items.length ? 0 : _index;
@@ -56,7 +57,11 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Theme.of(context).colorScheme.surface,
               destinations: [
                 for (final i in items)
-                  NavigationRailDestination(icon: Icon(i.icon), selectedIcon: Icon(i.selectedIcon), label: Text(i.label)),
+                  NavigationRailDestination(
+                    icon: i.isProfile ? UserAvatar(avatarUrl: appState.currentProfile?.avatarUrl, name: appState.currentProfile?.name ?? '', radius: 11) : Icon(i.icon),
+                    selectedIcon: i.isProfile ? UserAvatar(avatarUrl: appState.currentProfile?.avatarUrl, name: appState.currentProfile?.name ?? '', radius: 11) : Icon(i.selectedIcon),
+                    label: Text(i.label),
+                  ),
               ],
             ),
             const VerticalDivider(width: 1),
@@ -73,7 +78,16 @@ class _HomeScreenState extends State<HomeScreen> {
       extendBody: true,
       body: pages,
       bottomNavigationBar: SumaBottomNav(
-        items: [for (final i in items) BottomNavEntry(label: i.label, icon: i.icon, selectedIcon: i.selectedIcon)],
+        items: [
+          for (final i in items)
+            BottomNavEntry(
+              label: i.label,
+              icon: i.icon,
+              selectedIcon: i.selectedIcon,
+              avatarName: i.isProfile ? (appState.currentProfile?.name ?? '') : null,
+              avatarUrl: i.isProfile ? appState.currentProfile?.avatarUrl : null,
+            ),
+        ],
         selectedIndex: safeIndex,
         onSelect: _goTo,
         onAdd: () => EntryFormSheet.show(context),
@@ -119,5 +133,6 @@ class _NavItem {
   final IconData icon;
   final IconData selectedIcon;
   final Widget page;
-  const _NavItem(this.label, this.icon, this.selectedIcon, this.page);
+  final bool isProfile;
+  const _NavItem(this.label, this.icon, this.selectedIcon, this.page, {this.isProfile = false});
 }

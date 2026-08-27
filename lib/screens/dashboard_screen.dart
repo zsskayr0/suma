@@ -354,17 +354,9 @@ class _GoalCard extends StatelessWidget {
     // Progress since the goal was set - falls back to the oldest entry on
     // file for goals set before that snapshot existed.
     final start = goalStartWeightKg ?? entries.last.weightKg;
-    final totalDelta = goalWeightKg - start;
-    final doneDelta = current - start;
     final remainingKg = (goalWeightKg - current).abs();
     final reached = remainingKg < 0.05;
-    // When start and goal are (nearly) the same weight the ratio below is
-    // undefined - that's not automatically "100% done", it only means the
-    // goal was already met at the moment it was set. Treat it as complete
-    // only if the current weight is actually still at/near that goal;
-    // otherwise this is someone who has since drifted away from a goal that
-    // started as a no-op, and the bar should reflect that honestly.
-    final progress = totalDelta.abs() < 0.05 ? (reached ? 1.0 : 0.0) : (doneDelta / totalDelta).clamp(0.0, 1.0).toDouble();
+    final progress = goalProgressFraction(currentKg: current, startKg: start, goalWeightKg: goalWeightKg);
     final verb = goalType == 'lose' ? 'emagrecer' : 'ganhar peso';
 
     return SumaCard(

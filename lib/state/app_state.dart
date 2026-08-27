@@ -273,6 +273,41 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Splits into "nome" and "sobrenome" for editing, but stored as the
+  /// single `name` column ("Nome Sobrenome") - see [Profile.lastName].
+  Future<void> updateName({required String firstName, required String lastName}) async {
+    final name = [firstName.trim(), lastName.trim()].where((s) => s.isNotEmpty).join(' ');
+    await _client.from('profiles').update({'name': name}).eq('id', currentProfile!.id);
+    currentProfile = currentProfile!.copyWith(name: name);
+    notifyListeners();
+  }
+
+  /// Uploads a picked image as the user's profile photo (bucket "avatars",
+  /// one file per person at `uid/avatar.ext` - `upsert: true` so a new pick
+  /// just overwrites the old one instead of accumulating files).
+  /// Returns null on success, or a user-facing error message.
+  Future<String?> updateAvatar({required List<int> bytes, required String extension}) async {
+    final uid = currentProfile!.id;
+    final path = '$uid/avatar.$extension';
+    try {
+      await _client.storage.from('avatars').uploadBinary(
+            path,
+            Uint8List.fromList(bytes),
+            fileOptions: FileOptions(upsert: true, contentType: 'image/$extension'),
+          );
+      // The path never changes on a re-upload, so a plain getPublicUrl()
+      // would keep resolving to whatever's cached client-side - a
+      // cache-busting query param forces the new image to actually load.
+      final url = '${_client.storage.from('avatars').getPublicUrl(path)}?v=${DateTime.now().millisecondsSinceEpoch}';
+      await _client.from('profiles').update({'avatar_url': url}).eq('id', uid);
+      currentProfile = currentProfile!.copyWith(avatarUrl: url);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Não foi possível enviar a foto. Tente novamente.';
+    }
+  }
+
   Future<void> updateHeight(double heightCm) async {
     await _client.from('profiles').update({'height_cm': heightCm}).eq('id', currentProfile!.id);
     currentProfile = currentProfile!.copyWith(heightCm: heightCm);
