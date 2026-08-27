@@ -18,6 +18,58 @@ class ChartSeries {
   const ChartSeries({required this.label, required this.color, required this.entries});
 }
 
+/// The visible date/value window the chart is drawn against - kept as plain
+/// doubles (epoch ms for dates) so it can be lerped smoothly frame by frame
+/// during a zoom/expand transition, which `DateTime` can't do on its own.
+class _ChartDomain {
+  final double minDateMs;
+  final double maxDateMs;
+  final double minV;
+  final double maxV;
+
+  const _ChartDomain({required this.minDateMs, required this.maxDateMs, required this.minV, required this.maxV});
+
+  static _ChartDomain lerp(_ChartDomain a, _ChartDomain b, double t) {
+    return _ChartDomain(
+      minDateMs: ui.lerpDouble(a.minDateMs, b.minDateMs, t)!,
+      maxDateMs: ui.lerpDouble(a.maxDateMs, b.maxDateMs, t)!,
+      minV: ui.lerpDouble(a.minV, b.minV, t)!,
+      maxV: ui.lerpDouble(a.maxV, b.maxV, t)!,
+    );
+  }
+}
+
+/// The domain a given set of series naturally spans - the same window the
+/// chart settles on once any zoom transition finishes.
+_ChartDomain _domainFor(List<ChartSeries> nonEmpty, String unitPref, double? goalWeightKg) {
+  DateTime minDate = nonEmpty.first.entries.first.date;
+  DateTime maxDate = nonEmpty.first.entries.last.date;
+  double minV = double.infinity;
+  double maxV = double.negativeInfinity;
+  for (final s in nonEmpty) {
+    for (final e in s.entries) {
+      if (e.date.isBefore(minDate)) minDate = e.date;
+      if (e.date.isAfter(maxDate)) maxDate = e.date;
+      final v = Units.displayValue(e.weightKg, unitPref);
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+  }
+  final displayGoal = goalWeightKg != null ? Units.displayValue(goalWeightKg, unitPref) : null;
+  if (displayGoal != null) {
+    minV = math.min(minV, displayGoal);
+    maxV = math.max(maxV, displayGoal);
+  }
+  if ((maxV - minV).abs() < 0.6) {
+    maxV += 0.6;
+    minV -= 0.6;
+  }
+  final span = maxV - minV;
+  minV -= span * 0.18;
+  maxV += span * 0.22; // a bit more headroom on top for peak bubbles
+  return _ChartDomain(minDateMs: minDate.millisecondsSinceEpoch.toDouble(), maxDateMs: maxDate.millisecondsSinceEpoch.toDouble(), minV: minV, maxV: maxV);
+}
+
 /// A smooth, gradient-filled weight trend chart drawn entirely with
 /// [CustomPainter] (no charting package dependency). Plots one or more
 /// [ChartSeries] on a shared date/value scale - a single series gets the
@@ -43,13 +95,74 @@ class WeightLineChart extends StatefulWidget {
   State<WeightLineChart> createState() => _WeightLineChartState();
 }
 
-class _WeightLineChartState extends State<WeightLineChart> {
+class _WeightLineChartState extends State<WeightLineChart> with TickerProviderStateMixin {
   Offset? _touch;
+
+  // Plays once, the very first time the chart appears - the line "draws
+  // itself in". Never replayed after that.
+  late final AnimationController _revealCtrl;
+
+  // Plays whenever the plotted data actually changes (period filter,
+  // member selection, a new entry) - the domain (date/value window) tweens
+  // from where it was to where it needs to be, so the chart *zooms* into a
+  // narrower range or *expands* into a wider one instead of vanishing and
+  // redrawing from scratch.
+  late final AnimationController _domainCtrl;
+  _ChartDomain? _fromDomain;
+  _ChartDomain? _toDomain;
+
+  @override
+  void initState() {
+    super.initState();
+    _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750))..forward();
+    _domainCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 550));
+  }
+
+  @override
+  void didUpdateWidget(covariant WeightLineChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_sameData(oldWidget.series, widget.series)) return;
+
+    final newNonEmpty = widget.series.where((s) => s.entries.isNotEmpty).toList();
+    final newPointCount = newNonEmpty.fold<int>(0, (n, s) => n + s.entries.length);
+    if (newPointCount < 2) {
+      // Filtered down to (almost) nothing to plot - the widget falls back
+      // to its placeholder text below, nothing to zoom to.
+      _toDomain = null;
+      return;
+    }
+
+    final oldNonEmpty = oldWidget.series.where((s) => s.entries.isNotEmpty).toList();
+    final oldPointCount = oldNonEmpty.fold<int>(0, (n, s) => n + s.entries.length);
+    final newDomain = _domainFor(newNonEmpty, widget.unitPref, widget.goalWeightKg);
+    _fromDomain = oldPointCount >= 2 ? _domainFor(oldNonEmpty, widget.unitPref, widget.goalWeightKg) : newDomain;
+    _toDomain = newDomain;
+    _domainCtrl.forward(from: 0);
+  }
+
+  bool _sameData(List<ChartSeries> a, List<ChartSeries> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].label != b[i].label || a[i].entries.length != b[i].entries.length) return false;
+      if (a[i].entries.isNotEmpty) {
+        final ea = a[i].entries.last, eb = b[i].entries.last;
+        if (ea.weightKg != eb.weightKg || ea.date != eb.date) return false;
+      }
+    }
+    return true;
+  }
 
   void _setTouch(Offset? p) {
     if (!mounted) return;
     if (p == null && _touch == null) return;
     setState(() => _touch = p);
+  }
+
+  @override
+  void dispose() {
+    _revealCtrl.dispose();
+    _domainCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -70,6 +183,8 @@ class _WeightLineChartState extends State<WeightLineChart> {
         ),
       );
     }
+
+    final restingDomain = _toDomain ?? _domainFor(nonEmpty, widget.unitPref, widget.goalWeightKg);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,19 +207,33 @@ class _WeightLineChartState extends State<WeightLineChart> {
             child: SizedBox(
               height: widget.height,
               width: double.infinity,
-              child: CustomPaint(
-                painter: _ChartPainter(
-                  series: nonEmpty,
-                  unitPref: widget.unitPref,
-                  goalWeightKg: widget.goalWeightKg,
-                  gridColor: scheme.outlineVariant.withValues(alpha: 0.4),
-                  labelColor: scheme.onSurfaceVariant,
-                  markerFill: scheme.surface,
-                  singleSeriesFill: nonEmpty.length == 1,
-                  touch: _touch,
-                  tooltipBg: scheme.inverseSurface,
-                  tooltipFg: scheme.onInverseSurface,
-                ),
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_revealCtrl, _domainCtrl]),
+                builder: (context, _) {
+                  final from = _fromDomain;
+                  final domain = (from != null && _domainCtrl.value < 1.0)
+                      ? _ChartDomain.lerp(from, restingDomain, Curves.easeOutCubic.transform(_domainCtrl.value))
+                      : restingDomain;
+                  return CustomPaint(
+                    painter: _ChartPainter(
+                      series: nonEmpty,
+                      unitPref: widget.unitPref,
+                      goalWeightKg: widget.goalWeightKg,
+                      domain: domain,
+                      gridColor: scheme.outlineVariant.withValues(alpha: 0.4),
+                      labelColor: scheme.onSurfaceVariant,
+                      markerFill: scheme.surface,
+                      singleSeriesFill: nonEmpty.length == 1,
+                      touch: _touch,
+                      tooltipBg: scheme.inverseSurface,
+                      tooltipFg: scheme.onInverseSurface,
+                      // Only plays on first mount (see initState/didUpdateWidget) -
+                      // a period/member change zooms the domain instead of
+                      // redrawing the line from scratch.
+                      revealProgress: Curves.easeOutCubic.transform(_revealCtrl.value),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -136,6 +265,7 @@ class _ChartPainter extends CustomPainter {
   final List<ChartSeries> series;
   final String unitPref;
   final double? goalWeightKg;
+  final _ChartDomain domain;
   final Color gridColor;
   final Color labelColor;
   final Color markerFill;
@@ -143,11 +273,13 @@ class _ChartPainter extends CustomPainter {
   final Offset? touch;
   final Color tooltipBg;
   final Color tooltipFg;
+  final double revealProgress;
 
   _ChartPainter({
     required this.series,
     required this.unitPref,
     required this.goalWeightKg,
+    required this.domain,
     required this.gridColor,
     required this.labelColor,
     required this.markerFill,
@@ -155,7 +287,34 @@ class _ChartPainter extends CustomPainter {
     required this.touch,
     required this.tooltipBg,
     required this.tooltipFg,
+    required this.revealProgress,
   });
+
+  /// Cuts [path] off at the [t] (0..1) fraction of its total length -
+  /// [end] is the exact point where the cut happened (null when [t] >= 1,
+  /// meaning "just use the path as-is, all the way to its real end").
+  ({Path path, Offset? end}) _truncatePath(Path path, double t) {
+    if (t >= 1.0) return (path: path, end: null);
+    if (t <= 0.0) return (path: Path(), end: null);
+    final metrics = path.computeMetrics().toList();
+    final totalLength = metrics.fold<double>(0, (sum, m) => sum + m.length);
+    final targetLength = totalLength * t;
+    final result = Path();
+    var consumed = 0.0;
+    Offset? end;
+    for (final metric in metrics) {
+      if (consumed + metric.length < targetLength) {
+        result.addPath(metric.extractPath(0, metric.length), Offset.zero);
+        consumed += metric.length;
+        continue;
+      }
+      final remaining = targetLength - consumed;
+      result.addPath(metric.extractPath(0, remaining), Offset.zero);
+      end = metric.getTangentForOffset(remaining)?.position;
+      break;
+    }
+    return (path: result, end: end);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -166,40 +325,24 @@ class _ChartPainter extends CustomPainter {
     final chartLeft = sidePad;
     final chartRight = size.width - sidePad;
 
-    DateTime minDate = series.first.entries.first.date;
-    DateTime maxDate = series.first.entries.last.date;
-    double minV = double.infinity;
-    double maxV = double.negativeInfinity;
-    for (final s in series) {
-      for (final e in s.entries) {
-        if (e.date.isBefore(minDate)) minDate = e.date;
-        if (e.date.isAfter(maxDate)) maxDate = e.date;
-        final v = Units.displayValue(e.weightKg, unitPref);
-        if (v < minV) minV = v;
-        if (v > maxV) maxV = v;
-      }
-    }
-    final displayGoal = goalWeightKg != null ? Units.displayValue(goalWeightKg!, unitPref) : null;
-    if (displayGoal != null) {
-      minV = math.min(minV, displayGoal);
-      maxV = math.max(maxV, displayGoal);
-    }
-    if ((maxV - minV).abs() < 0.6) {
-      maxV += 0.6;
-      minV -= 0.6;
-    }
-    final span = maxV - minV;
-    minV -= span * 0.18;
-    maxV += span * 0.22; // a bit more headroom on top for peak bubbles
+    final minDateMs = domain.minDateMs;
+    final totalMs = math.max(1.0, domain.maxDateMs - minDateMs);
+    final minV = domain.minV;
+    final maxV = domain.maxV;
 
-    final totalDays = math.max(1, maxDate.difference(minDate).inDays);
-
-    double xFor(DateTime d) => chartLeft + (d.difference(minDate).inDays / totalDays) * (chartRight - chartLeft);
+    double xFor(DateTime d) => chartLeft + ((d.millisecondsSinceEpoch - minDateMs) / totalMs) * (chartRight - chartLeft);
     double yFor(double v) => topPad + chartHeight - ((v - minV) / (maxV - minV)) * chartHeight;
     DateTime dateForX(double x) {
       final fraction = ((x - chartLeft) / (chartRight - chartLeft)).clamp(0.0, 1.0);
-      return minDate.add(Duration(days: (fraction * totalDays).round()));
+      return DateTime.fromMillisecondsSinceEpoch((minDateMs + fraction * totalMs).round());
     }
+
+    // Points outside the current (possibly mid-zoom) domain are clamped
+    // into view instead of being cut - during a transition, a series can
+    // briefly span more or less than what's visible, and this keeps the
+    // line from ending in an abrupt, off-curve chop at the edges.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
     // Horizontal gridlines.
     final gridPaint = Paint()
@@ -211,6 +354,7 @@ class _ChartPainter extends CustomPainter {
     }
 
     // Goal dashed line.
+    final displayGoal = goalWeightKg != null ? Units.displayValue(goalWeightKg!, unitPref) : null;
     if (displayGoal != null) {
       _drawDashedLine(canvas, Offset(0, yFor(displayGoal)), Offset(size.width, yFor(displayGoal)), series.first.color.withValues(alpha: 0.55));
     }
@@ -227,15 +371,24 @@ class _ChartPainter extends CustomPainter {
         linePath.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
       }
 
+      // The line "draws itself in" - reveal cuts both the stroke and the
+      // fill off at the same point along the curve, so the gradient never
+      // extends past where the line has actually reached yet. Only
+      // relevant on first mount - revealProgress is pinned at 1 for every
+      // repaint after that, so this is a no-op during a zoom transition.
+      final revealed = _truncatePath(linePath, revealProgress);
+      final revealedLine = revealed.path;
+      final frontier = revealed.end ?? points.last;
+
       // Every series gets its own soft gradient fill under its line, not
       // just when it's the only one on the chart - comparing two family
       // members used to make both go flat/lineless the moment a second
       // person was added. Multiple overlapping fills read fine as long as
       // each is faint enough not to muddy the others.
-      if (points.length > 1) {
+      if (points.length > 1 && revealProgress > 0) {
         final fillAlpha = singleSeriesFill ? 0.30 : 0.16;
-        final areaPath = Path.from(linePath)
-          ..lineTo(points.last.dx, topPad + chartHeight)
+        final areaPath = Path.from(revealedLine)
+          ..lineTo(frontier.dx, topPad + chartHeight)
           ..lineTo(points.first.dx, topPad + chartHeight)
           ..close();
         final shader = ui.Gradient.linear(
@@ -247,7 +400,7 @@ class _ChartPainter extends CustomPainter {
       }
 
       canvas.drawPath(
-        linePath,
+        revealedLine,
         Paint()
           ..color = s.color
           ..style = PaintingStyle.stroke
@@ -256,14 +409,20 @@ class _ChartPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
 
+      // Markers/labels pop in only once the line has (almost) finished
+      // drawing, fading in over the last stretch of the reveal instead of
+      // just appearing mid-animation.
+      final markerOpacity = ((revealProgress - 0.85) / 0.15).clamp(0.0, 1.0);
+      if (markerOpacity <= 0) continue;
+
       if (singleSeriesFill) {
         final last = points.last;
-        canvas.drawCircle(last, 6, Paint()..color = markerFill);
+        canvas.drawCircle(last, 6, Paint()..color = markerFill.withValues(alpha: markerOpacity));
         canvas.drawCircle(last, 6, Paint()
-          ..color = s.color
+          ..color = s.color.withValues(alpha: s.color.a * markerOpacity)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.4);
-        canvas.drawCircle(last, 2.6, Paint()..color = s.color);
+        canvas.drawCircle(last, 2.6, Paint()..color = s.color.withValues(alpha: s.color.a * markerOpacity));
 
         // Peak/trough labels - skip if either coincides with the last point
         // (already marked) or there are too few points to make it useful.
@@ -274,21 +433,23 @@ class _ChartPainter extends CustomPainter {
             if (s.entries[i].weightKg < s.entries[minIdx].weightKg) minIdx = i;
           }
           if (maxIdx != s.entries.length - 1) {
-            _drawValueBubble(canvas, points[maxIdx], Units.format(s.entries[maxIdx].weightKg, unitPref), s.color, above: true);
+            _drawValueBubble(canvas, points[maxIdx], Units.format(s.entries[maxIdx].weightKg, unitPref), s.color, above: true, opacity: markerOpacity, canvasWidth: size.width);
           }
           if (minIdx != s.entries.length - 1 && minIdx != maxIdx) {
-            _drawValueBubble(canvas, points[minIdx], Units.format(s.entries[minIdx].weightKg, unitPref), s.color, above: false);
+            _drawValueBubble(canvas, points[minIdx], Units.format(s.entries[minIdx].weightKg, unitPref), s.color, above: false, opacity: markerOpacity, canvasWidth: size.width);
           }
         }
       } else {
         for (final p in points) {
-          canvas.drawCircle(p, 3, Paint()..color = s.color);
+          canvas.drawCircle(p, 3, Paint()..color = s.color.withValues(alpha: s.color.a * markerOpacity));
         }
       }
     }
 
-    _drawLabel(canvas, DateFormat('dd/MM/yyyy').format(minDate), Offset(sidePad, size.height - bottomPad + 4), TextAlign.left);
-    _drawLabel(canvas, DateFormat('dd/MM').format(maxDate), Offset(size.width - sidePad, size.height - bottomPad + 4), TextAlign.right);
+    canvas.restore();
+
+    _drawLabel(canvas, DateFormat('dd/MM/yyyy').format(DateTime.fromMillisecondsSinceEpoch(domain.minDateMs.round())), Offset(sidePad, size.height - bottomPad + 4), TextAlign.left);
+    _drawLabel(canvas, DateFormat('dd/MM').format(DateTime.fromMillisecondsSinceEpoch(domain.maxDateMs.round())), Offset(size.width - sidePad, size.height - bottomPad + 4), TextAlign.right);
 
     // Touch/drag tooltip: nearest entry per series to the touched date.
     final t = touch;
@@ -328,20 +489,25 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  void _drawValueBubble(Canvas canvas, Offset point, String text, Color color, {required bool above}) {
+  void _drawValueBubble(Canvas canvas, Offset point, String text, Color color, {required bool above, double opacity = 1.0, required double canvasWidth}) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white)),
+      text: TextSpan(text: text, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: opacity))),
       textDirection: ui.TextDirection.ltr,
     )..layout();
     const paddingH = 6.0, paddingV = 3.0;
     final bubbleWidth = painter.width + paddingH * 2;
     final bubbleHeight = painter.height + paddingV * 2;
     final dy = above ? point.dy - bubbleHeight - 8 : point.dy + 8;
+    // Clamped horizontally - a peak/trough very often lands right at one
+    // edge of a short window (the min/max of the last 30 days is commonly
+    // the oldest or newest point in it), and without this the bubble's text
+    // got clipped clean off-canvas whenever that happened.
+    final left = (point.dx - bubbleWidth / 2).clamp(0.0, math.max(0.0, canvasWidth - bubbleWidth)).toDouble();
     final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(point.dx - bubbleWidth / 2, dy, bubbleWidth, bubbleHeight),
+      Rect.fromLTWH(left, dy, bubbleWidth, bubbleHeight),
       const Radius.circular(6),
     );
-    canvas.drawRRect(rect, Paint()..color = color);
+    canvas.drawRRect(rect, Paint()..color = color.withValues(alpha: color.a * opacity));
     painter.paint(canvas, Offset(rect.left + paddingH, rect.top + paddingV));
   }
 
@@ -413,6 +579,8 @@ class _ChartPainter extends CustomPainter {
     return oldDelegate.series != series ||
         oldDelegate.unitPref != unitPref ||
         oldDelegate.goalWeightKg != goalWeightKg ||
-        oldDelegate.touch != touch;
+        oldDelegate.touch != touch ||
+        oldDelegate.revealProgress != revealProgress ||
+        oldDelegate.domain != domain;
   }
 }

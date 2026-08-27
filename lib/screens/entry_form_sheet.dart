@@ -11,12 +11,12 @@ import '../utils/units.dart';
 import '../widgets/suma_date_picker.dart';
 import '../widgets/suma_glass_sheet.dart';
 
-/// The register-entry panel: a centered "liquid glass" card (always dark,
-/// regardless of the app's own theme) styled after a precision design tool
-/// (Figma/macOS) rather than a standard mobile form - ultra-thin outline
-/// icons, hairline field borders instead of filled chips, white/off-white
-/// text at a lighter weight. Used both to add a new measurement and to edit
-/// an existing one (pass [existing] for the edit case). The weight field is
+/// The register-entry panel: a centered glass card, theme-aware like the
+/// rest of the app now (same flat+blur recipe as the bottom nav), styled
+/// after a precision design tool (Figma/macOS) rather than a standard
+/// mobile form - ultra-thin outline icons, hairline field borders instead
+/// of filled chips. Used both to add a new measurement and to edit an
+/// existing one (pass [existing] for the edit case). The weight field is
 /// shown in whichever unit the logged-in user prefers, converting to/from kg
 /// (the storage unit) transparently.
 class EntryFormSheet extends StatefulWidget {
@@ -106,25 +106,24 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  static const _labelStyle = TextStyle(color: Colors.white60, fontWeight: FontWeight.w500, fontSize: 13.5);
-  static const _valueStyle = TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 15);
-
-  InputDecoration _fieldDecoration({required String label, required HeroIcons icon}) {
+  InputDecoration _fieldDecoration(BuildContext context, {required String label, required HeroIcons icon}) {
+    final scheme = Theme.of(context).colorScheme;
+    final base = scheme.onSurface;
     OutlineInputBorder border(Color color, double width) =>
         OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: color, width: width));
     return InputDecoration(
       labelText: label,
-      labelStyle: _labelStyle,
-      floatingLabelStyle: const TextStyle(color: AppColors.cyan, fontWeight: FontWeight.w600, fontSize: 13),
+      labelStyle: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500, fontSize: 13.5),
+      floatingLabelStyle: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600, fontSize: 13),
       prefixIcon: Padding(
         padding: const EdgeInsets.only(left: 2),
-        child: HeroIcon(icon, style: HeroIconStyle.outline, size: 18, color: Colors.white54),
+        child: HeroIcon(icon, style: HeroIconStyle.outline, size: 18, color: scheme.onSurfaceVariant),
       ),
       filled: false,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      enabledBorder: border(Colors.white.withValues(alpha: 0.16), 1),
-      border: border(Colors.white.withValues(alpha: 0.16), 1),
-      focusedBorder: border(AppColors.cyan.withValues(alpha: 0.85), 1.3),
+      enabledBorder: border(base.withValues(alpha: 0.16), 1),
+      border: border(base.withValues(alpha: 0.16), 1),
+      focusedBorder: border(scheme.primary.withValues(alpha: 0.85), 1.3),
       errorBorder: border(AppColors.negative.withValues(alpha: 0.7), 1),
       focusedErrorBorder: border(AppColors.negative, 1.3),
       errorStyle: const TextStyle(color: AppColors.negative, fontSize: 11.5),
@@ -133,6 +132,9 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textColor = scheme.onSurface;
+    final valueStyle = TextStyle(color: textColor, fontWeight: FontWeight.w500, fontSize: 15);
     return Padding(
       padding: EdgeInsets.only(
         left: 22, right: 22, top: 18,
@@ -150,7 +152,7 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                   Expanded(
                     child: Text(
                       widget.existing == null ? 'Novo registro' : 'Editar registro',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 19),
+                      style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 19),
                     ),
                   ),
                   InkWell(
@@ -158,40 +160,40 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
                     onTap: () => Navigator.of(context).pop(),
                     child: Padding(
                       padding: const EdgeInsets.all(6),
-                      child: HeroIcon(HeroIcons.xMark, style: HeroIconStyle.outline, size: 20, color: Colors.white70),
+                      child: HeroIcon(HeroIcons.xMark, style: HeroIconStyle.outline, size: 20, color: scheme.onSurfaceVariant),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
-              Divider(color: Colors.white.withValues(alpha: 0.12), height: 1),
+              Divider(color: textColor.withValues(alpha: 0.12), height: 1),
               const SizedBox(height: 18),
               InkWell(
                 borderRadius: BorderRadius.circular(14),
                 onTap: _pickDate,
                 child: InputDecorator(
-                  decoration: _fieldDecoration(label: 'Data', icon: HeroIcons.calendar),
-                  child: Text(DateFormat('dd/MM/yyyy').format(_date), style: _valueStyle),
+                  decoration: _fieldDecoration(context, label: 'Data', icon: HeroIcons.calendar),
+                  child: Text(DateFormat('dd/MM/yyyy').format(_date), style: valueStyle),
                 ),
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _weightCtrl,
-                style: _valueStyle,
-                cursorColor: AppColors.cyan,
+                style: valueStyle,
+                cursorColor: scheme.primary,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: _fieldDecoration(label: 'Peso (${Units.label(_unitPref)})', icon: HeroIcons.scale),
+                decoration: _fieldDecoration(context, label: 'Peso (${Units.label(_unitPref)})', icon: HeroIcons.scale),
                 validator: (v) => _parse(v ?? '') == null ? 'Informe o peso' : null,
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _fatCtrl,
-                style: _valueStyle,
-                cursorColor: AppColors.cyan,
+                style: valueStyle,
+                cursorColor: scheme.primary,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: _fieldDecoration(label: 'Gordura corporal (%) - opcional', icon: HeroIcons.chartPie),
+                decoration: _fieldDecoration(context, label: 'Gordura corporal (%) - opcional', icon: HeroIcons.chartPie),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final val = _parse(v);
@@ -203,11 +205,11 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _hydrationCtrl,
-                style: _valueStyle,
-                cursorColor: AppColors.cyan,
+                style: valueStyle,
+                cursorColor: scheme.primary,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9,]'))],
-                decoration: _fieldDecoration(label: 'Hidratação (%) - opcional', icon: HeroIcons.beaker),
+                decoration: _fieldDecoration(context, label: 'Hidratação (%) - opcional', icon: HeroIcons.beaker),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null;
                   final val = _parse(v);
@@ -219,16 +221,16 @@ class _EntryFormSheetState extends State<EntryFormSheet> {
               const SizedBox(height: 14),
               TextFormField(
                 controller: _notesCtrl,
-                style: _valueStyle,
-                cursorColor: AppColors.cyan,
-                decoration: _fieldDecoration(label: 'Notas - opcional', icon: HeroIcons.documentText),
+                style: valueStyle,
+                cursorColor: scheme.primary,
+                decoration: _fieldDecoration(context, label: 'Notas - opcional', icon: HeroIcons.documentText),
                 maxLines: 2,
               ),
               const SizedBox(height: 22),
               FilledButton.icon(
                 onPressed: _saving ? null : _submit,
                 icon: _saving
-                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onPrimary))
                     : const HeroIcon(HeroIcons.check, style: HeroIconStyle.solid, size: 18),
                 label: const Text('Salvar'),
               ),

@@ -345,12 +345,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           // A stacked list instead of a 3-way SegmentedButton - side by side,
           // "Sistema"/"Escuro" didn't have room to stay on one line and wrapped
-          // mid-word inside their segment.
-          _ThemeOption(icon: Icons.smartphone_rounded, label: 'Sistema', value: 'system', selected: user.themePref, onSelected: appState.updateThemePref),
+          // mid-word inside their segment. Reads from appState.themePref
+          // (device-local), not the profile - this is the one preference on
+          // this whole screen that deliberately doesn't follow the account
+          // to another phone.
+          _ThemeOption(icon: Icons.smartphone_rounded, label: 'Sistema', value: 'system', selected: appState.themePref, onSelected: appState.updateThemePref),
           const SizedBox(height: 8),
-          _ThemeOption(icon: Icons.light_mode_outlined, label: 'Claro', value: 'light', selected: user.themePref, onSelected: appState.updateThemePref),
+          _ThemeOption(icon: Icons.light_mode_outlined, label: 'Claro', value: 'light', selected: appState.themePref, onSelected: appState.updateThemePref),
           const SizedBox(height: 8),
-          _ThemeOption(icon: Icons.dark_mode_outlined, label: 'Escuro', value: 'dark', selected: user.themePref, onSelected: appState.updateThemePref),
+          _ThemeOption(icon: Icons.dark_mode_outlined, label: 'Escuro', value: 'dark', selected: appState.themePref, onSelected: appState.updateThemePref),
         ],
       ),
     );

@@ -3,6 +3,12 @@
 /// now live entirely in Supabase Auth, this only holds the app-specific
 /// profile (preferences collected on first-run onboarding + family
 /// membership).
+///
+/// Notably absent: theme (light/dark/system). That one's deliberately
+/// device-local, not part of the account - see [AppState.themePref] - so
+/// logging into the same account on a different phone doesn't drag one
+/// phone's appearance choice onto the other. The `theme_pref` column still
+/// exists in `profiles` (unused, harmless) from before that changed.
 class Profile {
   final String id; // matches auth.users.id / Supabase session user id
   final String? email; // from the auth session, not stored in this table
@@ -15,7 +21,6 @@ class Profile {
   final String goalType; // 'lose' or 'gain'
   final double? goalStartWeightKg; // snapshot of current weight when the goal was last set
   final String unitPref; // 'kg' or 'lb'
-  final String themePref; // 'system', 'light' or 'dark'
   final bool onboarded;
   final DateTime createdAt;
 
@@ -31,7 +36,6 @@ class Profile {
     this.goalType = 'lose',
     this.goalStartWeightKg,
     this.unitPref = 'kg',
-    this.themePref = 'system',
     this.onboarded = false,
     required this.createdAt,
   });
@@ -66,7 +70,6 @@ class Profile {
     String? goalType,
     double? goalStartWeightKg,
     String? unitPref,
-    String? themePref,
     bool? onboarded,
   }) {
     return Profile(
@@ -81,7 +84,6 @@ class Profile {
       goalType: clearGoal ? this.goalType : (goalType ?? this.goalType),
       goalStartWeightKg: clearGoal ? null : (goalStartWeightKg ?? this.goalStartWeightKg),
       unitPref: unitPref ?? this.unitPref,
-      themePref: themePref ?? this.themePref,
       onboarded: onboarded ?? this.onboarded,
       createdAt: createdAt,
     );
@@ -100,7 +102,6 @@ class Profile {
       goalType: map['goal_type'] as String? ?? 'lose',
       goalStartWeightKg: _toDouble(map['goal_start_weight_kg']),
       unitPref: map['unit_pref'] as String? ?? 'kg',
-      themePref: map['theme_pref'] as String? ?? 'system',
       onboarded: map['onboarded'] as bool? ?? false,
       createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : DateTime.now(),
     );

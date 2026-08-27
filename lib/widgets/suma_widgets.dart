@@ -199,15 +199,48 @@ class StatTile extends StatelessWidget {
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 10),
-          Text(
-            value,
+          _RollingStatValue(
+            text: value,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, color: valueColor),
-            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
         ],
       ),
+    );
+  }
+}
+
+/// Renders a [StatTile]'s value as a rolling number when it has one (e.g.
+/// "105.1 kg", "17") - starts at 0 and spins up to the real value at a
+/// decelerating speed, like a slot-machine reel settling, and re-rolls from
+/// whatever it's currently showing whenever the value actually changes.
+/// Falls back to plain text for anything that isn't a leading number (e.g.
+/// "—" when there's no data yet).
+class _RollingStatValue extends StatelessWidget {
+  final String text;
+  final TextStyle? style;
+  const _RollingStatValue({required this.text, required this.style});
+
+  static final _numeric = RegExp(r'^(-?\d+(?:[.,]\d+)?)(.*)$');
+
+  @override
+  Widget build(BuildContext context) {
+    final match = _numeric.firstMatch(text);
+    if (match == null) return Text(text, style: style, overflow: TextOverflow.ellipsis);
+
+    final numberText = match.group(1)!;
+    final suffix = match.group(2)!;
+    final normalized = numberText.replaceAll(',', '.');
+    final target = double.tryParse(normalized);
+    if (target == null) return Text(text, style: style, overflow: TextOverflow.ellipsis);
+    final decimals = normalized.contains('.') ? normalized.split('.').last.length : 0;
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: target),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutExpo,
+      builder: (context, animated, _) => Text('${animated.toStringAsFixed(decimals)}$suffix', style: style, overflow: TextOverflow.ellipsis),
     );
   }
 }

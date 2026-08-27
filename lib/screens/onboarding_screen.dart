@@ -45,7 +45,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     _showFamilyPage = context.read<AppState>().currentProfile?.familyId == null;
     _pageCount = _showFamilyPage ? 5 : 4;
-    _themePref = context.read<AppState>().currentProfile?.themePref ?? 'system';
+    _themePref = context.read<AppState>().themePref;
   }
 
   @override

@@ -5,7 +5,7 @@ import 'package:suma/main.dart';
 
 void main() {
   testWidgets('Suma boots and shows a loading state', (WidgetTester tester) async {
-    await tester.pumpWidget(const SumaApp());
+    await tester.pumpWidget(const SumaApp(initialThemePref: 'system'));
 
     // Before the database finishes bootstrapping, we show a spinner rather
     // than crash or render a blank screen.

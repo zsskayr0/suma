@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
@@ -13,16 +14,22 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.anonKey);
-  runApp(const SumaApp());
+  // Read before the first frame, not inside AppState.bootstrap(), so there's
+  // no flash of the wrong theme while a SharedPreferences read is pending -
+  // this is device-local and doesn't need the auth session to be resolved.
+  final prefs = await SharedPreferences.getInstance();
+  final initialThemePref = prefs.getString(themePrefStorageKey) ?? 'system';
+  runApp(SumaApp(initialThemePref: initialThemePref));
 }
 
 class SumaApp extends StatelessWidget {
-  const SumaApp({super.key});
+  final String initialThemePref;
+  const SumaApp({super.key, required this.initialThemePref});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppState()..bootstrap(),
+      create: (_) => AppState(themePref: initialThemePref)..bootstrap(),
       // Selector instead of Consumer: AppState.notifyListeners() fires on
       // nearly every interaction (entry edits, optimistic pref updates,
       // family refreshes), and MaterialApp is an expensive thing to rebuild
@@ -31,8 +38,8 @@ class SumaApp extends StatelessWidget {
       // theme preference - means those other, far more frequent notifies
       // only re-run the (cheap) screens that actually watch AppState
       // themselves, instead of also rebuilding MaterialApp every time.
-      child: Selector<AppState, String?>(
-        selector: (_, appState) => appState.currentProfile?.themePref,
+      child: Selector<AppState, String>(
+        selector: (_, appState) => appState.themePref,
         builder: (context, themePref, _) {
           return MaterialApp(
             title: 'Suma',
@@ -47,7 +54,7 @@ class SumaApp extends StatelessWidget {
     );
   }
 
-  ThemeMode _themeModeFor(String? pref) {
+  ThemeMode _themeModeFor(String pref) {
     switch (pref) {
       case 'light':
         return ThemeMode.light;

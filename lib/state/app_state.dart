@@ -1,11 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/entry.dart';
 import '../models/family.dart';
 import '../models/profile.dart';
+
+/// SharedPreferences key for the device-local theme preference - exposed
+/// (not private) so main.dart can read it before the first frame, without
+/// waiting on AppState/bootstrap.
+const themePrefStorageKey = 'suma.theme_pref';
 
 enum AppPhase { loading, needsAuth, needsOnboarding, ready }
 
@@ -29,7 +35,14 @@ class AppState extends ChangeNotifier {
   List<WeightEntry> entries = [];
   String? authError;
 
+  /// 'system', 'light' or 'dark' - device-local (SharedPreferences), never
+  /// synced through the account. Read directly by [main.dart] to pick
+  /// MaterialApp's themeMode, independent of who's signed in.
+  String themePref;
+
   StreamSubscription<AuthState>? _authSub;
+
+  AppState({this.themePref = 'system'});
 
   void bootstrap() {
     _authSub = _client.auth.onAuthStateChange.listen((data) {
@@ -210,9 +223,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Completes the onboarding wizard: stores height/unit/theme preferences
-  /// and logs the very first weight entry in one go. If a goal is set, the
+  /// Completes the onboarding wizard: stores height/unit preferences and
+  /// logs the very first weight entry in one go. If a goal is set, the
   /// just-entered weight becomes its starting point for progress tracking.
+  /// [themePref] is applied locally (see [updateThemePref]) - it was never
+  /// an account-level setting, onboarding just happens to be where someone
+  /// first picks it.
   Future<void> completeOnboarding({
     required double heightCm,
     required double initialWeightKg,
@@ -227,7 +243,6 @@ class AppState extends ChangeNotifier {
       'goal_type': goalType,
       'goal_start_weight_kg': goalWeightKg == null ? null : initialWeightKg,
       'unit_pref': unitPref,
-      'theme_pref': themePref,
       'onboarded': true,
     }).eq('id', currentProfile!.id);
 
@@ -238,29 +253,26 @@ class AppState extends ChangeNotifier {
       goalType: goalType,
       goalStartWeightKg: goalWeightKg == null ? null : initialWeightKg,
       unitPref: unitPref,
-      themePref: themePref,
       onboarded: true,
     );
+    await updateThemePref(themePref);
     await addEntry(date: DateTime.now(), weightKg: initialWeightKg);
     phase = AppPhase.ready;
     notifyListeners();
   }
 
-  /// Applies the theme change immediately (optimistic update) and syncs it
-  /// to Supabase in the background - awaiting the network round-trip first
-  /// (as every other AppState mutation does) makes a supposedly-instant
-  /// toggle feel laggy, since this now goes over the network instead of a
-  /// local database. Reverts quietly if the sync ends up failing.
-  Future<void> updateThemePref(String themePref) async {
-    final previous = currentProfile;
-    currentProfile = currentProfile!.copyWith(themePref: themePref);
+  /// Applies the theme change immediately and remembers it in
+  /// SharedPreferences - deliberately device-local, never sent to Supabase.
+  /// Unit/height/goal are genuine account settings (you'd want your goal to
+  /// follow you to a new phone); appearance is closer to a system setting,
+  /// and syncing it meant signing into the same account on a different
+  /// phone silently changed that phone's look, which read as a bug more
+  /// than a feature.
+  Future<void> updateThemePref(String pref) async {
+    themePref = pref;
     notifyListeners();
-    try {
-      await _client.from('profiles').update({'theme_pref': themePref}).eq('id', currentProfile!.id);
-    } catch (_) {
-      currentProfile = previous;
-      notifyListeners();
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(themePrefStorageKey, pref);
   }
 
   /// Same optimistic-update reasoning as [updateThemePref].
