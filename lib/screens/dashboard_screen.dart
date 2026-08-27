@@ -9,7 +9,6 @@ import '../utils/bmi.dart';
 import '../utils/goal_trend.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
-import '../widgets/family_heatmap.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
 import 'entry_form_sheet.dart';
@@ -115,8 +114,6 @@ class DashboardScreen extends StatelessWidget {
                     ],
                   );
 
-                  final showHeatmap = user.isAdmin && appState.currentFamily != null && appState.familyMembers.length > 1;
-
                   if (wide) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,7 +130,6 @@ class DashboardScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         statGrid,
-                        if (showHeatmap) ...[const SizedBox(height: 10), const FamilyHeatmap()],
                       ],
                     );
                   }
@@ -146,7 +142,6 @@ class DashboardScreen extends StatelessWidget {
                       sideColumn,
                       const SizedBox(height: 10),
                       statGrid,
-                      if (showHeatmap) ...[const SizedBox(height: 10), const FamilyHeatmap()],
                     ],
                   );
                 },

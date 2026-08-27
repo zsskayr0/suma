@@ -402,12 +402,14 @@ class Pill extends StatelessWidget {
 class ResponsiveBody extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final ScrollController? controller;
 
-  const ResponsiveBody({super.key, required this.child, this.padding = const EdgeInsets.fromLTRB(14, 6, 14, 84)});
+  const ResponsiveBody({super.key, required this.child, this.padding = const EdgeInsets.fromLTRB(14, 6, 14, 84), this.controller});
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      controller: controller,
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(

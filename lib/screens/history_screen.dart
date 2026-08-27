@@ -7,6 +7,7 @@ import '../models/profile.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/goal_trend.dart';
+import '../utils/responsive.dart';
 import '../utils/units.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
@@ -48,6 +49,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final Map<String, List<WeightEntry>> _othersEntries = {};
   bool _loadingOthers = false;
 
+  final _scrollCtrl = ScrollController();
+  bool _showBackToTop = false;
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +61,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     // no realtime subscription, so a fresh look each time this tab opens is
     // the next best thing.
     appState.refreshFamilyMembers();
+    _scrollCtrl.addListener(() {
+      final show = _scrollCtrl.offset > 400;
+      if (show != _showBackToTop) setState(() => _showBackToTop = show);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scrollToTop() {
+    return _scrollCtrl.animateTo(0, duration: const Duration(milliseconds: 420), curve: Curves.easeOutCubic);
   }
 
   Future<void> _ensureLoaded(String userId, AppState appState) async {
@@ -152,42 +170,67 @@ class _HistoryScreenState extends State<HistoryScreen> {
           ? Center(
               child: Text('Nenhum registro ainda', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             )
-          : ResponsiveBody(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (canPickMembers) ...[
-                    _MemberPicker(
-                      members: pickable,
-                      selected: selected,
-                      colorFor: colorFor,
-                      onToggle: (id) => _toggleUser(id, appState),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (_loadingOthers) const LinearProgressIndicator(minHeight: 2),
-                  _PeriodFilter(selected: _filterDays, onChanged: (v) => setState(() => _filterDays = v)),
-                  const SizedBox(height: 14),
-                  SumaCard(
-                    child: WeightLineChart(series: chartSeries, unitPref: unitPref),
-                  ),
-                  const SizedBox(height: 14),
-                  if (selected.length == 1 && rows.isNotEmpty) _SummaryRow(entries: rows.map((r) => r.entry).toList(), unitPref: unitPref),
-                  const SizedBox(height: 18),
-                  for (final entry in groups.entries) ...[
-                    SectionLabel(entry.key),
-                    for (final row in entry.value)
-                      _HistoryTile(
-                        row: row,
-                        unitPref: unitPref,
-                        showOwner: showOwner,
-                        ownerColor: colorFor(row.owner.id),
-                        isSelf: row.owner.id == selfProfile.id,
+          : Stack(
+              children: [
+                ResponsiveBody(
+                  controller: _scrollCtrl,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (canPickMembers) ...[
+                        _MemberPicker(
+                          members: pickable,
+                          selected: selected,
+                          colorFor: colorFor,
+                          onToggle: (id) => _toggleUser(id, appState),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_loadingOthers) const LinearProgressIndicator(minHeight: 2),
+                      _PeriodFilter(selected: _filterDays, onChanged: (v) => setState(() => _filterDays = v)),
+                      const SizedBox(height: 14),
+                      SumaCard(
+                        child: WeightLineChart(series: chartSeries, unitPref: unitPref),
                       ),
-                    const SizedBox(height: 10),
-                  ],
-                ],
-              ),
+                      const SizedBox(height: 14),
+                      if (selected.length == 1 && rows.isNotEmpty) _SummaryRow(entries: rows.map((r) => r.entry).toList(), unitPref: unitPref),
+                      const SizedBox(height: 18),
+                      for (final entry in groups.entries) ...[
+                        SectionLabel(entry.key),
+                        for (final row in entry.value)
+                          _HistoryTile(
+                            row: row,
+                            unitPref: unitPref,
+                            showOwner: showOwner,
+                            ownerColor: colorFor(row.owner.id),
+                            isSelf: row.owner.id == selfProfile.id,
+                          ),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 16,
+                  // Clears the floating bottom nav's pill + raised "+" on
+                  // mobile; desktop has no floating nav, so a plain small
+                  // margin is enough there.
+                  bottom: Responsive.isDesktop(context) ? 20 : 96,
+                  child: IgnorePointer(
+                    ignoring: !_showBackToTop,
+                    child: AnimatedSlide(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      offset: _showBackToTop ? Offset.zero : const Offset(0, 0.6),
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 220),
+                        opacity: _showBackToTop ? 1 : 0,
+                        child: _BackToTopButton(onTap: _scrollToTop),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
     );
   }
@@ -373,6 +416,38 @@ class _HistoryTile extends StatelessWidget {
     if (confirmed == true) {
       await appState.deleteEntry(entry.id!);
     }
+  }
+}
+
+/// Small floating button, appears once the list is scrolled past a
+/// threshold - Histórico can get long (years of entries), so this beats
+/// scrolling all the way back up by hand.
+class _BackToTopButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _BackToTopButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Theme.of(context).cardTheme.color ?? scheme.surface,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.35 : 0.08), blurRadius: 14, offset: const Offset(0, 6))],
+          ),
+          child: Icon(Icons.arrow_upward_rounded, color: scheme.primary, size: 20),
+        ),
+      ),
+    );
   }
 }
 

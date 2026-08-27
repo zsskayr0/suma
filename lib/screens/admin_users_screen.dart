@@ -7,6 +7,7 @@ import '../services/csv_export_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/goal_trend.dart';
+import '../widgets/family_heatmap.dart';
 import '../widgets/suma_widgets.dart';
 
 /// Admin-only tab: view every member of the family network and export
@@ -129,6 +130,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _GoalProximityCard(members: members, entriesByMember: _entriesByMember, loading: _loadingEntries),
+                  if (members.length > 1) ...[const SizedBox(height: 14), const FamilyHeatmap()],
                   const SizedBox(height: 14),
                   const SectionLabel('Membros'),
                   for (final member in members) ...[
@@ -184,11 +186,6 @@ class _GoalProximityCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(child: Text('Mais perto da meta', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
             ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Só a porcentagem de progresso - sem mostrar o peso de ninguém.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 14),
           if (loading && ranked.isEmpty)

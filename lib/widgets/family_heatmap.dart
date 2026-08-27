@@ -12,9 +12,10 @@ const _monthNames = [
 const _weekdayLetters = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D']; // Mon..Sun
 
 /// Admin-only, GitHub-style contribution grid: one cell per day, colored by
-/// how many family members logged a weight that day. Lives on Hoje, right
-/// below the stat grid, and only renders for an admin with more than one
-/// person in their family (a single-person family has nothing to compare).
+/// how many family members logged a weight that day. Lives on the Usuários
+/// tab, below the goal-proximity ranking - only rendered when there's more
+/// than one person in the family (a single-person family has nothing to
+/// compare).
 class FamilyHeatmap extends StatefulWidget {
   const FamilyHeatmap({super.key});
 
@@ -72,14 +73,15 @@ class _HeatGrid extends StatelessWidget {
   static const _cellGap = 3.0;
   static const _days = 126;
 
+  /// A single continuous ramp within Suma's own blue/turquoise family - pale,
+  /// low-saturation cyan at low participation, up to a rich, fully-saturated
+  /// deep blue at full participation. No hue jump (e.g. green -> blue)
+  /// anywhere along the ramp, unlike the old green-to-blue version.
   Color _colorFor(BuildContext context, int count) {
     final scheme = Theme.of(context).colorScheme;
     if (count <= 0) return scheme.surfaceContainerHighest.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.7);
-    final ratio = count / memberCount;
-    if (ratio >= 1.0) return AppColors.cyan;
-    if (ratio >= 0.66) return AppColors.deepBlue.withValues(alpha: 0.85);
-    if (ratio >= 0.33) return AppColors.green.withValues(alpha: 0.75);
-    return AppColors.mint.withValues(alpha: 0.55);
+    final ratio = (count / memberCount).clamp(0.0, 1.0);
+    return Color.lerp(AppColors.cyan.withValues(alpha: 0.35), AppColors.deepBlue, ratio)!;
   }
 
   @override
