@@ -12,8 +12,6 @@ bool isAuthDark(BuildContext context) => Theme.of(context).brightness == Brightn
 
 Color authPageColor(BuildContext context) => isAuthDark(context) ? Colors.black : Colors.white;
 
-Color authCardColor(BuildContext context) => isAuthDark(context) ? const Color(0xFF0A0A0A) : Colors.white;
-
 Color authBorderColor(BuildContext context) => isAuthDark(context) ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.08);
 
 Color authTextColor(BuildContext context) => isAuthDark(context) ? Colors.white : Colors.black;
@@ -92,59 +90,101 @@ class AuthLabeledField extends StatelessWidget {
   }
 }
 
-/// The rounded, subtly-bordered card the login/signup form sits in - the
-/// reference floats this as a distinct surface over the page background,
-/// not just the form fields sitting directly on it.
-class AuthCard extends StatelessWidget {
-  final Widget child;
-  const AuthCard({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: authCardColor(context),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: child,
-    );
-  }
-}
-
-/// The decorative-only "Continue with Google/Apple" buttons - shown for
-/// visual completeness, intentionally not wired to a real provider (Suma's
+/// The decorative-only Facebook/Google/Apple buttons - shown for visual
+/// completeness, intentionally not wired to a real provider (Suma's
 /// Supabase project isn't configured with OAuth), so tapping just says so.
+/// Shown as a compact icon-only square (matching the reference's row of
+/// three) rather than a labeled button - there isn't room for three full
+/// "Continue with ..." buttons side by side.
 class AuthSocialButton extends StatelessWidget {
   final AuthSocialProvider provider;
+  const AuthSocialButton.facebook({super.key}) : provider = AuthSocialProvider.facebook;
   const AuthSocialButton.google({super.key}) : provider = AuthSocialProvider.google;
   const AuthSocialButton.apple({super.key}) : provider = AuthSocialProvider.apple;
 
   @override
   Widget build(BuildContext context) {
     final textColor = authTextColor(context);
+    Widget icon;
+    switch (provider) {
+      case AuthSocialProvider.facebook:
+        icon = const Icon(Icons.facebook_rounded, size: 22, color: Color(0xFF1877F2));
+        break;
+      case AuthSocialProvider.google:
+        icon = const Icon(Icons.g_mobiledata_rounded, size: 28, color: Color(0xFF4285F4));
+        break;
+      case AuthSocialProvider.apple:
+        icon = Icon(Icons.apple, size: 19, color: textColor);
+        break;
+    }
     return OutlinedButton(
       onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Em breve.'))),
       style: OutlinedButton.styleFrom(
         minimumSize: const Size.fromHeight(50),
+        padding: EdgeInsets.zero,
         side: BorderSide(color: authBorderColor(context)),
-        foregroundColor: textColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          provider == AuthSocialProvider.google
-              ? const Icon(Icons.g_mobiledata_rounded, size: 26, color: Color(0xFF4285F4))
-              : Icon(Icons.apple, size: 19, color: textColor),
-          const SizedBox(width: 8),
-          Text(provider == AuthSocialProvider.google ? 'Continuar com Google' : 'Continuar com Apple', style: TextStyle(color: textColor, fontWeight: FontWeight.w600, fontSize: 14)),
-        ],
-      ),
+      child: icon,
     );
   }
 }
 
-enum AuthSocialProvider { google, apple }
+enum AuthSocialProvider { facebook, google, apple }
+
+/// The pill-shaped Login/Register tab switcher at the top of the card -
+/// the primary way to move between the two forms (the "Já tem conta?" /
+/// "Não tem conta?" link at the bottom does the same thing, kept as a
+/// secondary affordance since the reference shows both).
+class AuthTabSwitcher extends StatelessWidget {
+  final int index; // 0 = login, 1 = register
+  final ValueChanged<int> onChanged;
+  const AuthTabSwitcher({super.key, required this.index, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = isAuthDark(context);
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: dark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.045),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _tab(context, 'Login', 0)),
+          Expanded(child: _tab(context, 'Cadastro', 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _tab(BuildContext context, String label, int i) {
+    final selected = index == i;
+    final dark = isAuthDark(context);
+    return GestureDetector(
+      onTap: () => onChanged(i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? (dark ? const Color(0xFF1A1A1A) : Colors.white) : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: selected ? [BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.4 : 0.08), blurRadius: 6, offset: const Offset(0, 2))] : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: authTextColor(context),
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// "Or" / "Or sign with" divider - [withLines] draws hairlines on either
 /// side (signup's reference); without, it's just centered text (login's).
