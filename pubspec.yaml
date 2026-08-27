@@ -106,6 +106,8 @@ flutter:
     - assets/branding/suma_mark.png
     - assets/branding/suma_wordmark.png
     - assets/branding/auth_wave.jpg
+    - assets/branding/google_logo.png
+    - assets/branding/facebook_logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

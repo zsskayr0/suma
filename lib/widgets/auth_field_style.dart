@@ -108,10 +108,10 @@ class AuthSocialButton extends StatelessWidget {
     Widget icon;
     switch (provider) {
       case AuthSocialProvider.facebook:
-        icon = const Icon(Icons.facebook_rounded, size: 22, color: Color(0xFF1877F2));
+        icon = Image.asset('assets/branding/facebook_logo.png', width: 20, height: 20);
         break;
       case AuthSocialProvider.google:
-        icon = const Icon(Icons.g_mobiledata_rounded, size: 28, color: Color(0xFF4285F4));
+        icon = Image.asset('assets/branding/google_logo.png', width: 20, height: 20);
         break;
       case AuthSocialProvider.apple:
         icon = Icon(Icons.apple, size: 19, color: textColor);
