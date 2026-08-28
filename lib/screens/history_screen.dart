@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../utils/goal_trend.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../widgets/period_filter.dart';
 import '../widgets/suma_glass_sheet.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
@@ -194,7 +195,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         const SizedBox(height: 12),
                       ],
                       if (_loadingOthers) const LinearProgressIndicator(minHeight: 2),
-                      _PeriodFilter(selected: _filterDays, onChanged: (v) => setState(() => _filterDays = v)),
+                      PeriodFilter(selected: _filterDays, onChanged: (v) => setState(() => _filterDays = v)),
                       const SizedBox(height: 14),
                       SumaCard(
                         child: WeightLineChart(series: chartSeries, unitPref: unitPref, revealToken: widget.revealToken),
@@ -325,103 +326,6 @@ class _MemberChip extends StatelessWidget {
                     child: Text(member.firstName),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PeriodFilter extends StatelessWidget {
-  final int? selected;
-  final ValueChanged<int?> onChanged;
-  const _PeriodFilter({required this.selected, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    // Compact suffixes on mobile so all five chips fit on one line without
-    // needing a horizontal scroll to reach "Tudo" - desktop has the room to
-    // spell them out, so it keeps the full labels.
-    final compact = !Responsive.isDesktop(context);
-    final options = <String, int?>{
-      compact ? '30d' : '30 dias': 30,
-      compact ? '90d' : '90 dias': 90,
-      compact ? '6m' : '6 meses': 182,
-      compact ? '1a' : '1 ano': 365,
-      'Tudo': null,
-    };
-    // Separate glass pills (each with its own blur, same recipe as the
-    // floating bottom nav) instead of one shared bar - centered as a row.
-    return Center(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final o in options.entries) ...[
-              _PeriodChip(label: o.key, selected: selected == o.value, onTap: () => onChanged(o.value)),
-              const SizedBox(width: 8),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PeriodChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PeriodChip({required this.label, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(100),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 260),
-              // Not easeOutBack here - "back" curves briefly overshoot past
-              // their target (that's what makes them bounce), and this
-              // container's boxShadow animates between a real shadow and
-              // none. An overshot progress value made BoxShadow.lerp compute
-              // a momentarily *negative* blurRadius, which crashes with
-              // "Text shadow blur radius should be non-negative" - Flutter
-              // reuses that assertion for BoxShadow too, since it's built on
-              // the same Shadow class as actual text shadows. The bounce
-              // itself still reads fine on the AnimatedScale below, which
-              // only ever animates between two small positive numbers.
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-              decoration: BoxDecoration(
-                color: selected ? scheme.primary : (dark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(color: selected ? Colors.transparent : scheme.outlineVariant.withValues(alpha: dark ? 0.3 : 0.5)),
-                boxShadow: selected ? [BoxShadow(color: scheme.primary.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 3))] : null,
-              ),
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutBack,
-                scale: selected ? 1.05 : 1.0,
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 180),
-                  style: TextStyle(
-                    color: selected ? Colors.white : scheme.onSurfaceVariant,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13,
-                  ),
-                  child: Text(label),
-                ),
               ),
             ),
           ),

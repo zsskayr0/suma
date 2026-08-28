@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/pet.dart';
 import '../services/csv_export_service.dart';
 import '../services/notification_service.dart';
 import '../state/app_state.dart';
@@ -23,6 +24,8 @@ import '../widgets/suma_option_menu.dart';
 import '../widgets/suma_time_picker.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/theme_picker_menu.dart';
+import 'pet_edit_sheet.dart';
+import 'pet_history_screen.dart';
 import 'qr_scan_screen.dart';
 
 const _weekdayShort = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']; // DateTime.weekday order, 1=Mon..7=Sun
@@ -140,6 +143,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível abrir $url')));
     }
+  }
+
+  void _openPetHistory(Pet pet) {
+    final appState = context.read<AppState>();
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PetHistoryScreen(pickablePets: appState.myPets, initialPetId: pet.id!)));
   }
 
   Future<void> _pickWeightUnit(AppState appState) async {
@@ -412,6 +420,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
 
+    final petsCard = _PetsCard(pets: appState.myPets, onOpenPet: _openPetHistory, onEditPet: (pet) => PetEditSheet.show(context, existing: pet), onAddPet: () => PetEditSheet.show(context));
+
     final preferencesCard = _SettingsGroup(
       rows: [
         _SettingsRow(icon: Icons.scale_outlined, title: 'Unidade de peso', value: user.unitPref == 'lb' ? 'Libras (lb)' : 'Quilos (kg)', onTap: () => _pickWeightUnit(appState)),
@@ -535,6 +545,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SectionLabel('Conta'),
       accountCard,
       const SizedBox(height: 22),
+      const SectionLabel('Pets'),
+      petsCard,
+      const SizedBox(height: 22),
       const SectionLabel('Preferências'),
       preferencesCard,
       const SizedBox(height: 22),
@@ -557,7 +570,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [profileCard, const SizedBox(height: 14), familyCard, const SizedBox(height: 22), const SectionLabel('Conta'), accountCard])),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            profileCard,
+                            const SizedBox(height: 14),
+                            familyCard,
+                            const SizedBox(height: 22),
+                            const SectionLabel('Conta'),
+                            accountCard,
+                            const SizedBox(height: 22),
+                            const SectionLabel('Pets'),
+                            petsCard,
+                          ],
+                        ),
+                      ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
@@ -1041,6 +1069,59 @@ class _EditGoalSheetState extends State<_EditGoalSheet> {
 /// "Preferências" and "Suporte" each render as one of these instead of a
 /// stack of separate standalone cards, mirroring a typical iOS/Android
 /// settings screen's grouped list.
+/// "Pets" - up to [maxPetsPerOwner] sub-profiles, each with its own weight
+/// history entirely separate from the owner's own. Tapping a pet opens its
+/// history (same screen "Usuários > Pets" opens, just pre-scoped to the
+/// owner's own pets here); the pencil opens the edit sheet instead, since a
+/// single tap can't mean both here.
+class _PetsCard extends StatelessWidget {
+  final List<Pet> pets;
+  final ValueChanged<Pet> onOpenPet;
+  final ValueChanged<Pet> onEditPet;
+  final VoidCallback onAddPet;
+  const _PetsCard({required this.pets, required this.onOpenPet, required this.onEditPet, required this.onAddPet});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SumaCard(
+      padding: EdgeInsets.zero,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          children: [
+            for (var i = 0; i < pets.length; i++) ...[
+              if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+              ListTile(
+                leading: CircleAvatar(radius: 20, backgroundColor: scheme.primary.withValues(alpha: 0.12), child: Icon(Icons.pets_rounded, color: scheme.primary, size: 20)),
+                title: Text(pets[i].name),
+                subtitle: Text([pets[i].species, if (pets[i].breed != null) pets[i].breed!].join(' · ')),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => onEditPet(pets[i])),
+                    Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+                onTap: () => onOpenPet(pets[i]),
+              ),
+            ],
+            if (pets.length < maxPetsPerOwner) ...[
+              if (pets.isNotEmpty) const Divider(height: 1, indent: 16, endIndent: 16),
+              ListTile(
+                leading: Icon(Icons.add_circle_outline_rounded, color: scheme.primary),
+                title: Text('Adicionar pet', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600)),
+                subtitle: Text('${pets.length}/$maxPetsPerOwner cadastrados'),
+                onTap: onAddPet,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SettingsGroup extends StatelessWidget {
   final List<_SettingsRow> rows;
   const _SettingsGroup({required this.rows});

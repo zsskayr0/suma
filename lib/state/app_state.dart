@@ -6,8 +6,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/entry.dart';
 import '../models/family.dart';
+import '../models/pet.dart';
+import '../models/pet_entry.dart';
 import '../models/profile.dart';
 import '../services/notification_service.dart';
+
+/// A pet counts against its owner's 3-pet limit - kept in one place since
+/// the app enforces it client-side too (a friendlier message before the
+/// round-trip, not instead of the server-side trigger in
+/// supabase/010_pets.sql).
+const maxPetsPerOwner = 3;
 
 /// SharedPreferences key for the device-local theme preference - exposed
 /// (not private) so main.dart can read it before the first frame, without
@@ -49,7 +57,16 @@ class AppState extends ChangeNotifier {
   FamilyInfo? currentFamily;
   List<Profile> familyMembers = [];
   List<WeightEntry> entries = [];
+  // Every pet *visible* to this account per RLS - own pets always, plus
+  // every family member's pets too when this account is the family admin
+  // (see supabase/010_pets.sql's pets_select_family_admin policy) - a
+  // regular member's own-only visibility falls out of that same query
+  // without needing a second one. [myPets] narrows it back down to just
+  // this account's own, e.g. for Ajustes.
+  List<Pet> pets = [];
   String? authError;
+
+  List<Pet> get myPets => pets.where((p) => p.ownerId == currentProfile?.id).toList();
 
   /// 'system', 'light' or 'dark' - device-local (SharedPreferences), never
   /// synced through the account. Read directly by [main.dart] to pick
@@ -111,6 +128,7 @@ class AppState extends ChangeNotifier {
       currentFamily = null;
       familyMembers = [];
       entries = [];
+      pets = [];
       phase = AppPhase.needsAuth;
       notifyListeners();
       return;
@@ -130,6 +148,7 @@ class AppState extends ChangeNotifier {
 
     await _loadFamilyInfo();
     await _loadEntries();
+    await _loadPets();
     if (currentProfile!.inFamily) {
       await _loadFamilyMembers();
     } else {
@@ -482,6 +501,79 @@ class AppState extends ChangeNotifier {
     } on PostgrestException catch (e) {
       return e.message;
     }
+  }
+
+  // ---------------- Pets ----------------
+
+  Future<void> _loadPets() async {
+    // No .eq('owner_id', ...) filter - RLS already returns exactly what
+    // this account can see (own pets always, every family member's too
+    // when this account is the admin). Ordered oldest-first so a newly
+    // added pet lands at the end of its owner's list, not shuffled in.
+    final rows = await _client.from('pets').select().order('created_at');
+    pets = rows.map((r) => Pet.fromMap(r)).toList();
+  }
+
+  /// Re-fetches the pet list - same "no realtime subscription" reasoning as
+  /// [refreshFamilyMembers].
+  Future<void> refreshPets() async {
+    await _loadPets();
+    notifyListeners();
+  }
+
+  /// Adds a pet to the current user's own subprofiles. Throws with a
+  /// user-facing message if they're already at [maxPetsPerOwner] (checked
+  /// client-side for a friendly message; supabase/010_pets.sql's trigger
+  /// enforces the same limit server-side regardless).
+  Future<void> addPet({required String name, DateTime? birthDate, required String species, String? breed}) async {
+    if (myPets.length >= maxPetsPerOwner) {
+      throw Exception('Você já tem o máximo de $maxPetsPerOwner pets cadastrados.');
+    }
+    final pet = Pet(ownerId: currentProfile!.id, name: name, birthDate: birthDate, species: species, breed: breed, createdAt: DateTime.now());
+    await _client.from('pets').insert(pet.toInsertMap());
+    await _loadPets();
+    notifyListeners();
+  }
+
+  Future<void> updatePet(Pet pet) async {
+    final b = pet.birthDate;
+    await _client.from('pets').update({
+      'name': pet.name,
+      'birth_date': b == null ? null : '${b.year.toString().padLeft(4, '0')}-${b.month.toString().padLeft(2, '0')}-${b.day.toString().padLeft(2, '0')}',
+      'species': pet.species,
+      'breed': pet.breed,
+    }).eq('id', pet.id as Object);
+    await _loadPets();
+    notifyListeners();
+  }
+
+  /// Deletes a pet and its entire weight history (cascades in the DB - see
+  /// pet_weight_entries' foreign key).
+  Future<void> deletePet(String petId) async {
+    await _client.from('pets').delete().eq('id', petId);
+    await _loadPets();
+    notifyListeners();
+  }
+
+  /// A pet's own weight history - fetched on demand (not preloaded with
+  /// every pet up front), same reasoning as [entriesFor] for another family
+  /// member's human entries.
+  Future<List<PetWeightEntry>> petEntriesFor(String petId) async {
+    final rows = await _client.from('pet_weight_entries').select().eq('pet_id', petId).order('date', ascending: false);
+    return rows.map((r) => PetWeightEntry.fromMap(r)).toList();
+  }
+
+  Future<void> addPetEntry({required String petId, required DateTime date, required double weightKg, String? notes}) async {
+    final entry = PetWeightEntry(petId: petId, date: date, weightKg: weightKg, notes: notes, createdAt: DateTime.now());
+    await _client.from('pet_weight_entries').upsert(entry.toInsertMap(), onConflict: 'pet_id,date');
+  }
+
+  Future<void> updatePetEntry(PetWeightEntry entry) async {
+    await _client.from('pet_weight_entries').update(entry.toInsertMap()).eq('id', entry.id as Object);
+  }
+
+  Future<void> deletePetEntry(String id) async {
+    await _client.from('pet_weight_entries').delete().eq('id', id);
   }
 
   // ---------------- Entries (current user) ----------------
