@@ -11,9 +11,21 @@ import '../utils/bmi.dart';
 import '../utils/goal_trend.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../utils/weight_insights.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
+import 'bmi_screen.dart';
 import 'entry_form_sheet.dart';
+
+const _monthAbbr = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+// Numeric dd/MM/yyyy is used everywhere else in the app specifically to
+// avoid needing intl's locale data initialized (see DateFormat calls
+// elsewhere) - this one spells the month out ("17 de dez. de 2025"), so it
+// uses its own small manual lookup instead of DateFormat's locale-aware
+// MMM, same reasoning as the day-letter arrays already scattered around the
+// app (_weekdayLettersMonFirst here, _monthNames in Histórico, ...).
+String _longDate(DateTime d) => '${d.day} de ${_monthAbbr[d.month - 1]}. de ${d.year}';
 
 /// "Hoje" tab: a real dashboard instead of a bare list - current weight,
 /// live BMI, a 30-day trend chart and quick stats. Anything older than 30
@@ -39,6 +51,15 @@ class DashboardScreen extends StatelessWidget {
 
     final cutoff = DateTime.now().subtract(const Duration(days: 30));
     final last30 = entries.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).toList().reversed.toList();
+
+    // "Faixa de peso" and "Variação total" look at the last year, not the
+    // whole history - years-old weights (right after starting, say) would
+    // otherwise dominate the min/max/delta forever, even long after they
+    // stopped being relevant.
+    final yearCutoff = DateTime.now().subtract(const Duration(days: 365));
+    final yearEntries = entries.where((e) => !e.date.isBefore(DateTime(yearCutoff.year, yearCutoff.month, yearCutoff.day))).toList();
+    final rangeStats = yearEntries.isNotEmpty ? weightRangeStats(yearEntries) : null;
+    final prediction = (entries.length > 1 && user.goalWeightKg != null) ? predictGoalArrival(entriesDesc: entries, goalWeightKg: user.goalWeightKg!) : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -104,7 +125,11 @@ class DashboardScreen extends StatelessWidget {
                   final sideColumn = Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _BmiCard(bmi: bmi, heightMissing: user.heightCm == null),
+                      _BmiCard(
+                        bmi: bmi,
+                        heightMissing: user.heightCm == null,
+                        onTap: bmi == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BmiScreen())),
+                      ),
                       if (user.goalWeightKg != null) ...[
                         const SizedBox(height: 10),
                         _GoalCard(
@@ -149,6 +174,37 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   );
 
+                  // "Faixa de peso" (all-time min/média/máximo + a couple
+                  // more stat tiles) and "Insights" (7-day trend + goal
+                  // arrival prediction) - both need at least 2 entries to
+                  // say anything real, same bar History's own summary row
+                  // uses.
+                  final extraSections = yearEntries.length > 1 && rangeStats != null
+                      ? [
+                          const SizedBox(height: 22),
+                          const SectionLabel('Geral'),
+                          _WeightRangeCard(stats: rangeStats, currentKg: entries.first.weightKg, goalWeightKg: user.goalWeightKg, unitPref: user.unitPref),
+                          const SizedBox(height: 14),
+                          KeyedSubtree(
+                            key: ValueKey('range_stats_$revealToken'),
+                            child: _RangeStatGrid(entries: yearEntries, stats: rangeStats, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
+                          ),
+                          const SizedBox(height: 22),
+                          const SectionLabel('Insights'),
+                          _TrendInsightCard(entries: entries, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
+                          const SizedBox(height: 10),
+                          _PaceCard(entries: entries, unitPref: user.unitPref, goalType: user.goalType),
+                          if (prediction != null) ...[
+                            const SizedBox(height: 10),
+                            _GoalPredictionCard(prediction: prediction, goalWeightKg: user.goalWeightKg!, unitPref: user.unitPref),
+                          ],
+                          if (user.goalWeightKg != null) ...[
+                            const SizedBox(height: 10),
+                            _RequiredPaceCard(entries: entries, goalWeightKg: user.goalWeightKg!, unitPref: user.unitPref),
+                          ],
+                        ]
+                      : const <Widget>[];
+
                   if (wide) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -165,6 +221,7 @@ class DashboardScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 10),
                         statGrid,
+                        ...extraSections,
                       ],
                     );
                   }
@@ -177,6 +234,7 @@ class DashboardScreen extends StatelessWidget {
                       sideColumn,
                       const SizedBox(height: 10),
                       statGrid,
+                      ...extraSections,
                     ],
                   );
                 },
@@ -450,13 +508,15 @@ class _HeroCard extends StatelessWidget {
 class _BmiCard extends StatelessWidget {
   final double? bmi;
   final bool heightMissing;
-  const _BmiCard({required this.bmi, required this.heightMissing});
+  final VoidCallback? onTap;
+  const _BmiCard({required this.bmi, required this.heightMissing, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (bmi == null) {
       return SumaCard(
+        onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -472,6 +532,7 @@ class _BmiCard extends StatelessWidget {
     }
     final color = Bmi.color(bmi!);
     return SumaCard(
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -482,7 +543,352 @@ class _BmiCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(bmi!.toStringAsFixed(1), style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(bmi!.toStringAsFixed(1), style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800)),
+              if (onTap != null) ...[
+                const Spacer(),
+                Padding(padding: const EdgeInsets.only(bottom: 6), child: Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant)),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Faixa de peso" - the all-time min/média/máximo, with a horizontal bar
+/// visualizing where the current weight sits between the two extremes (and,
+/// with a goal on file, a tick marking where the goal sits too).
+class _WeightRangeCard extends StatelessWidget {
+  final WeightRangeStats stats;
+  final double currentKg;
+  final double? goalWeightKg;
+  final String unitPref;
+  const _WeightRangeCard({required this.stats, required this.currentKg, required this.goalWeightKg, required this.unitPref});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Faixa de peso', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text('Desde ${_longDate(stats.since)}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 18),
+          _RangeBar(minKg: stats.minKg, maxKg: stats.maxKg, currentKg: currentKg, goalWeightKg: goalWeightKg),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: _RangeLabel(label: 'Mais baixo', value: Units.formatWithUnit(stats.minKg, unitPref), color: AppColors.positive, align: CrossAxisAlignment.start)),
+              Expanded(child: _RangeLabel(label: 'Média', value: Units.formatWithUnit(stats.avgKg, unitPref), color: scheme.onSurface, align: CrossAxisAlignment.center)),
+              Expanded(child: _RangeLabel(label: 'Mais alto', value: Units.formatWithUnit(stats.maxKg, unitPref), color: AppColors.negative, align: CrossAxisAlignment.end)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RangeLabel extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final CrossAxisAlignment align;
+  const _RangeLabel({required this.label, required this.value, required this.color, required this.align});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: color)),
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+}
+
+class _RangeBar extends StatelessWidget {
+  final double minKg;
+  final double maxKg;
+  final double currentKg;
+  final double? goalWeightKg;
+  const _RangeBar({required this.minKg, required this.maxKg, required this.currentKg, required this.goalWeightKg});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final span = (maxKg - minKg).abs() < 0.05 ? 1.0 : maxKg - minKg;
+    final currentFraction = ((currentKg - minKg) / span).clamp(0.0, 1.0);
+    final goalFraction = goalWeightKg == null ? null : ((goalWeightKg! - minKg) / span).clamp(0.0, 1.0);
+
+    return SizedBox(
+      height: 22,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Container(height: 6, decoration: BoxDecoration(color: scheme.outlineVariant.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(100))),
+              if (goalFraction != null)
+                Positioned(
+                  left: (goalFraction * width - 1).clamp(0.0, width - 2),
+                  child: Container(width: 2, height: 16, decoration: BoxDecoration(color: AppColors.goalAccent, borderRadius: BorderRadius.circular(2))),
+                ),
+              Positioned(
+                left: (currentFraction * width - 8).clamp(0.0, width - 16),
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.primary, border: Border.all(color: Theme.of(context).cardTheme.color ?? scheme.surface, width: 3)),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RangeStatGrid extends StatelessWidget {
+  final List<WeightEntry> entries; // date DESC, last year only
+  final WeightRangeStats stats;
+  final String unitPref;
+  final double? goalWeightKg;
+  final String goalType;
+  const _RangeStatGrid({required this.entries, required this.stats, required this.unitPref, required this.goalWeightKg, required this.goalType});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final totalDeltaKg = entries.first.weightKg - entries.last.weightKg;
+    final totalTrend = goalTrendPositive(fromKg: entries.last.weightKg, toKg: entries.first.weightKg, goalWeightKg: goalWeightKg, goalType: goalType);
+    final sign = totalDeltaKg == 0 ? '' : (totalDeltaKg < 0 ? '-' : '+');
+
+    return StatGrid(
+      children: [
+        StatTile(
+          icon: totalDeltaKg <= 0 ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+          color: scheme.primary,
+          label: 'Variação total',
+          value: '$sign${Units.displayValue(totalDeltaKg.abs(), unitPref).toStringAsFixed(1)} ${Units.label(unitPref)}',
+          trendPositive: totalTrend,
+        ),
+        StatTile(icon: Icons.calendar_month_outlined, color: scheme.primary, label: 'Acompanhamento', value: '${stats.monthsTracked} meses'),
+      ],
+    );
+  }
+}
+
+/// "Sua tendência de 7 dias" - same delta math as the 7-day StatTile above,
+/// just with a status Pill instead of just a colored value.
+class _TrendInsightCard extends StatelessWidget {
+  final List<WeightEntry> entries; // date DESC
+  final String unitPref;
+  final double? goalWeightKg;
+  final String goalType;
+  const _TrendInsightCard({required this.entries, required this.unitPref, required this.goalWeightKg, required this.goalType});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final latest = entries.first;
+    final cutoff = latest.date.subtract(const Duration(days: 7));
+    WeightEntry? reference;
+    for (final e in entries) {
+      if (!e.date.isAfter(cutoff)) {
+        reference = e;
+        break;
+      }
+    }
+    reference ??= entries.length > 1 ? entries.last : null;
+    if (reference == null || reference.id == latest.id) return const SizedBox.shrink();
+
+    final deltaKg = latest.weightKg - reference.weightKg;
+    final sign = deltaKg == 0 ? '' : (deltaKg < 0 ? '-' : '+');
+    final statusLabel = deltaKg.abs() < 0.05 ? 'Estável' : (deltaKg < 0 ? 'Em queda' : 'Em alta');
+    final positive = goalTrendPositive(fromKg: reference.weightKg, toKg: latest.weightKg, goalWeightKg: goalWeightKg, goalType: goalType);
+    final statusColor = positive == null ? scheme.onSurfaceVariant : (positive ? AppColors.positive : AppColors.negative);
+
+    return SumaCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+            child: Icon(deltaKg <= 0 ? Icons.trending_down_rounded : Icons.trending_up_rounded, color: scheme.primary, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$sign${Units.displayValue(deltaKg.abs(), unitPref).toStringAsFixed(1)} ${Units.label(unitPref)}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Sua tendência de 7 dias', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          Pill(text: statusLabel, color: statusColor),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Seu ritmo médio" - the last-30-days weekly rate (kg/semana), regardless
+/// of whether there's a goal on file - just "how fast is this actually
+/// moving lately".
+class _PaceCard extends StatelessWidget {
+  final List<WeightEntry> entries; // date DESC
+  final String unitPref;
+  final String goalType;
+  const _PaceCard({required this.entries, required this.unitPref, required this.goalType});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rate = weeklyRateKg(entries);
+    if (rate == null) return const SizedBox.shrink();
+    final sign = rate.abs() < 0.05 ? '' : (rate < 0 ? '-' : '+');
+    // Deliberately not passing goalWeightKg through - this asks "is a rate
+    // of *this sign* generally good for a goal of *this type*", not "is 0kg
+    // -> rate kg closer to the actual goal number", which wouldn't mean
+    // anything sensible here.
+    final positive = rate.abs() < 0.05 ? null : goalTrendPositive(fromKg: 0, toKg: rate, goalType: goalType);
+
+    return SumaCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+            child: Icon(Icons.speed_rounded, color: scheme.primary, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$sign${Units.displayValue(rate.abs(), unitPref).toStringAsFixed(2)} ${Units.label(unitPref)}/semana',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: positive == null ? null : (positive ? AppColors.positive : AppColors.negative),
+                      ),
+                ),
+                Text('Seu ritmo médio (últimos 30 dias)', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Pra bater a meta em até 6 meses" - the pace that would actually take,
+/// compared against the pace from [_PaceCard] so it's obvious whether the
+/// current rhythm is already enough or falling short.
+class _RequiredPaceCard extends StatelessWidget {
+  final List<WeightEntry> entries; // date DESC
+  final double goalWeightKg;
+  final String unitPref;
+  const _RequiredPaceCard({required this.entries, required this.goalWeightKg, required this.unitPref});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final required = requiredWeeklyRateKg(entries, goalWeightKg: goalWeightKg);
+    if (required == null) return const SizedBox.shrink();
+    if (required.abs() < 0.05) {
+      return SumaCard(
+        child: Row(
+          children: [
+            Icon(Icons.celebration_outlined, color: AppColors.positive, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Você já está na meta! 🎉', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+          ],
+        ),
+      );
+    }
+    final verb = required < 0 ? 'perder' : 'ganhar';
+    final requiredLabel = '${Units.displayValue(required.abs(), unitPref).toStringAsFixed(2)} ${Units.label(unitPref)}/semana';
+
+    final actualRate = weeklyRateKg(entries);
+    // "Enough" means moving the same direction as required, at least as
+    // fast - actualRate/required share sign only when both point the same
+    // way the goal actually needs.
+    final onTrackFor6Months = actualRate != null && (actualRate / required) >= 1.0 && (actualRate < 0) == (required < 0);
+
+    return SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.rocket_launch_outlined, color: scheme.primary, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Pra bater a meta em até 6 meses', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Seria necessário $verb cerca de $requiredLabel.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          if (actualRate != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              onTrackFor6Months ? 'Seu ritmo atual já é suficiente para isso. 🎉' : 'Seu ritmo atual está mais lento que isso - no passo de hoje, deve levar mais que 6 meses.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: onTrackFor6Months ? AppColors.positive : AppColors.negative, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// "Previsão da meta" - when the goal will likely be reached at the current
+/// pace, with a probable arrival window instead of a single falsely-precise
+/// date (see predictGoalArrival).
+class _GoalPredictionCard extends StatelessWidget {
+  final GoalPrediction prediction;
+  final double goalWeightKg;
+  final String unitPref;
+  const _GoalPredictionCard({required this.prediction, required this.goalWeightKg, required this.unitPref});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timeline_rounded, color: AppColors.goalAccent, size: 18),
+              const SizedBox(width: 8),
+              Text('Previsão da meta', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Nesse ritmo, você atingirá ${Units.formatWithUnit(goalWeightKg, unitPref)} por volta de ${_longDate(prediction.estimatedDate)}.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          Text('~${_longDate(prediction.estimatedDate)}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(
+            'Chegada provável entre ${_longDate(prediction.earliestDate)} e ${_longDate(prediction.latestDate)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
         ],
       ),
     );
