@@ -89,8 +89,13 @@ Future<T?> showSumaGlassSheet<T>(
           // actually making the theme picker stutter, not the theme
           // switch itself. Isolating both sides lets Flutter cache the
           // blur's layer across frames where it hasn't changed.
-          RepaintBoundary(
-            child: Positioned.fill(
+          // Positioned must stay Stack's *direct* child - RepaintBoundary
+          // goes inside it, wrapping the content, not the other way
+          // around. Wrapping Positioned itself breaks Stack's positioning
+          // (it silently stops filling the screen), which is exactly what
+          // made every glass sheet render blank.
+          Positioned.fill(
+            child: RepaintBoundary(
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => Navigator.of(ctx).maybePop(),
