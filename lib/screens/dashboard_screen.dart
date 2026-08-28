@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -18,8 +20,14 @@ import 'entry_form_sheet.dart';
 /// days lives in the Histórico tab (reachable via [onViewHistory]).
 class DashboardScreen extends StatelessWidget {
   final VoidCallback onViewHistory;
+  // Bumped by HomeScreen each time this tab becomes active again - replays
+  // the chart's reveal animation and the stat tiles' rolling-number
+  // count-up, instead of them just sitting at their already-settled values
+  // (IndexedStack keeps this screen's state alive across tab switches, so
+  // without this nothing would naturally replay on a revisit).
+  final Object revealToken;
 
-  const DashboardScreen({super.key, required this.onViewHistory});
+  const DashboardScreen({super.key, required this.onViewHistory, required this.revealToken});
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +41,21 @@ class DashboardScreen extends StatelessWidget {
     final last30 = entries.where((e) => !e.date.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day))).toList().reversed.toList();
 
     return Scaffold(
-      appBar: AppBar(title: Text('Olá, ${user.firstName} 👋')),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            UserAvatar(avatarUrl: user.avatarUrl, name: user.name, radius: 18, isAdmin: user.isAdmin),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Olá, ${user.firstName} 👋',
+                style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontSize: 23),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
       // The "+" to register a weight is universal now - the floating pill
       // nav's raised center button (mobile) / the rail's button (desktop) -
       // so there's no per-screen add affordance here anymore.
@@ -71,6 +93,7 @@ class DashboardScreen extends StatelessWidget {
                               series: [ChartSeries(label: user.name, color: Theme.of(context).colorScheme.primary, entries: last30)],
                               unitPref: user.unitPref,
                               goalWeightKg: user.goalWeightKg,
+                              revealToken: revealToken,
                             ),
                           ],
                         ),
@@ -88,14 +111,25 @@ class DashboardScreen extends StatelessWidget {
                           entries: entries,
                           goalWeightKg: user.goalWeightKg!,
                           goalType: user.goalType,
-                          goalStartWeightKg: user.goalStartWeightKg,
                           unitPref: user.unitPref,
                         ),
                       ],
+                      // Right below the goal, not at the top of the page -
+                      // the streak is a companion to "how's the goal going",
+                      // not the first thing you see.
+                      const SizedBox(height: 10),
+                      _WeighInStreakCard(entries: entries),
                     ],
                   );
 
-                  final statGrid = StatGrid(
+                  // KeyedSubtree forces a fresh mount on every revealToken
+                  // change - cheap here (no data fetching, just presentation)
+                  // and it's what makes each StatTile's rolling-number
+                  // count-up (which only animates from 0 on first mount)
+                  // replay every time this tab becomes active again.
+                  final statGrid = KeyedSubtree(
+                    key: ValueKey('stats_$revealToken'),
+                    child: StatGrid(
                     children: [
                       _deltaTile(context, entries: entries, days: 7, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
                       _deltaTile(context, entries: entries, days: 30, unitPref: user.unitPref, goalWeightKg: user.goalWeightKg, goalType: user.goalType),
@@ -112,6 +146,7 @@ class DashboardScreen extends StatelessWidget {
                         value: latest.hydrationPct != null ? '${latest.hydrationPct!.toStringAsFixed(1)}%' : '—',
                       ),
                     ],
+                    ),
                   );
 
                   if (wide) {
@@ -185,6 +220,133 @@ class DashboardScreen extends StatelessWidget {
       trendPositive: positive,
     );
   }
+}
+
+const _weekdayLettersMonFirst = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+
+/// "Sequência de pesagem" - a Duolingo-style weekly streak strip: one column
+/// per day of the current week (Monday first), a flame for days with a
+/// weight entry logged, a dashed empty circle for days without one (whether
+/// that's a day not reached yet or one that got missed - the app can't tell
+/// those apart, and visually they read the same either way). The current
+/// consecutive-day streak (counting back from today) is called out above it.
+class _WeighInStreakCard extends StatelessWidget {
+  final List<WeightEntry> entries; // date DESC
+  const _WeighInStreakCard({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final loggedDays = entries.map((e) => DateTime(e.date.year, e.date.month, e.date.day)).toSet();
+    // Monday of the current week - DateTime.weekday is already 1=Mon..7=Sun,
+    // so this lines up directly with _weekdayLettersMonFirst's order.
+    final monday = todayOnly.subtract(Duration(days: todayOnly.weekday - 1));
+    final weekDays = [for (var i = 0; i < 7; i++) monday.add(Duration(days: i))];
+
+    var streak = 0;
+    for (var d = todayOnly; loggedDays.contains(d); d = d.subtract(const Duration(days: 1))) {
+      streak++;
+    }
+
+    return SumaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SectionLabel('Essa semana', padding: EdgeInsets.zero),
+              const Spacer(),
+              if (streak > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🔥', style: TextStyle(fontSize: 15)),
+                    const SizedBox(width: 4),
+                    Text(
+                      streak == 1 ? '1 dia seguido' : '$streak dias seguidos',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < 7; i++)
+                _StreakDay(
+                  label: _weekdayLettersMonFirst[i],
+                  logged: loggedDays.contains(weekDays[i]),
+                  isToday: weekDays[i] == todayOnly,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakDay extends StatelessWidget {
+  final String label;
+  final bool logged;
+  final bool isToday;
+  const _StreakDay({required this.label, required this.logged, required this.isToday});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 0.3,
+            fontWeight: isToday ? FontWeight.w800 : FontWeight.w600,
+            color: isToday ? scheme.onSurface : scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: logged
+              ? const Center(child: Text('🔥', style: TextStyle(fontSize: 22)))
+              : CustomPaint(painter: _DashedCirclePainter(color: scheme.outlineVariant.withValues(alpha: 0.7))),
+        ),
+      ],
+    );
+  }
+}
+
+class _DashedCirclePainter extends CustomPainter {
+  final Color color;
+  const _DashedCirclePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius = size.width / 2 - 1;
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+    const dashCount = 10;
+    const gapFraction = 0.45; // fraction of each segment left as a gap
+    for (var i = 0; i < dashCount; i++) {
+      final startAngle = (i / dashCount) * 2 * math.pi;
+      final sweep = (2 * math.pi / dashCount) * (1 - gapFraction);
+      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, sweep, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedCirclePainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _EmptyDashboard extends StatelessWidget {
@@ -331,14 +493,12 @@ class _GoalCard extends StatelessWidget {
   final List<WeightEntry> entries; // date DESC
   final double goalWeightKg;
   final String goalType; // 'lose' or 'gain'
-  final double? goalStartWeightKg;
   final String unitPref;
 
   const _GoalCard({
     required this.entries,
     required this.goalWeightKg,
     required this.goalType,
-    required this.goalStartWeightKg,
     required this.unitPref,
   });
 
@@ -346,9 +506,11 @@ class _GoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final current = entries.first.weightKg;
-    // Progress since the goal was set - falls back to the oldest entry on
-    // file for goals set before that snapshot existed.
-    final start = goalStartWeightKg ?? entries.last.weightKg;
+    // Progress is always measured against the weight from exactly a year
+    // ago (falling back to the oldest entry on file for anyone without a
+    // full year of history yet) - a rolling window, not a fixed snapshot
+    // from whenever the goal happened to be set.
+    final start = goalBaselineWeightKg(entries);
     final remainingKg = (goalWeightKg - current).abs();
     final reached = remainingKg < 0.05;
     final progress = goalProgressFraction(currentKg: current, startKg: start, goalWeightKg: goalWeightKg);

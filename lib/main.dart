@@ -8,6 +8,7 @@ import 'screens/app_intro_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/welcome_screen.dart';
+import 'services/notification_service.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
@@ -19,17 +20,63 @@ Future<void> main() async {
   // this is device-local and doesn't need the auth session to be resolved.
   final prefs = await SharedPreferences.getInstance();
   final initialThemePref = prefs.getString(themePrefStorageKey) ?? 'system';
-  runApp(SumaApp(initialThemePref: initialThemePref));
+  final initialHeightUnitPref = prefs.getString(heightUnitPrefStorageKey) ?? 'cm';
+
+  final notifEnabled = prefs.getBool(notifEnabledStorageKey) ?? false;
+  final savedDays = prefs.getString(notifDaysStorageKey);
+  final notifDays = savedDays == null || savedDays.isEmpty
+      ? {1, 2, 3, 4, 5, 6, 7}
+      : savedDays.split(',').map(int.parse).toSet();
+  final notifHour = prefs.getInt(notifHourStorageKey) ?? 8;
+  final notifMinute = prefs.getInt(notifMinuteStorageKey) ?? 0;
+  await NotificationService.instance.init();
+  // Re-arms the schedule on every launch, not just when the settings screen
+  // is opened - an app update (or reinstall) wipes Android's AlarmManager
+  // state even though SharedPreferences survives it, so without this a
+  // reminder someone turned on could silently stop firing after an update.
+  if (notifEnabled && notifDays.isNotEmpty) {
+    await NotificationService.instance.scheduleWeekly(weekdays: notifDays, hour: notifHour, minute: notifMinute);
+  }
+
+  runApp(SumaApp(
+    initialThemePref: initialThemePref,
+    initialHeightUnitPref: initialHeightUnitPref,
+    initialNotifEnabled: notifEnabled,
+    initialNotifDays: notifDays,
+    initialNotifHour: notifHour,
+    initialNotifMinute: notifMinute,
+  ));
 }
 
 class SumaApp extends StatelessWidget {
   final String initialThemePref;
-  const SumaApp({super.key, required this.initialThemePref});
+  final String initialHeightUnitPref;
+  final bool initialNotifEnabled;
+  final Set<int> initialNotifDays;
+  final int initialNotifHour;
+  final int initialNotifMinute;
+
+  const SumaApp({
+    super.key,
+    required this.initialThemePref,
+    required this.initialHeightUnitPref,
+    required this.initialNotifEnabled,
+    required this.initialNotifDays,
+    required this.initialNotifHour,
+    required this.initialNotifMinute,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => AppState(themePref: initialThemePref)..bootstrap(),
+      create: (_) => AppState(
+        themePref: initialThemePref,
+        heightUnitPref: initialHeightUnitPref,
+        notifEnabled: initialNotifEnabled,
+        notifDays: initialNotifDays,
+        notifHour: initialNotifHour,
+        notifMinute: initialNotifMinute,
+      )..bootstrap(),
       // Selector instead of Consumer: AppState.notifyListeners() fires on
       // nearly every interaction (entry edits, optimistic pref updates,
       // family refreshes), and MaterialApp is an expensive thing to rebuild
@@ -41,13 +88,24 @@ class SumaApp extends StatelessWidget {
       child: Selector<AppState, String>(
         selector: (_, appState) => appState.themePref,
         builder: (context, themePref, _) {
-          return MaterialApp(
-            title: 'Suma',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: _themeModeFor(themePref),
-            home: const _RootRouter(),
+          final appState = context.read<AppState>();
+          // Cheap on purpose - see AppState.themePreviewOverride. This
+          // ValueListenableBuilder is the only thing that rebuilds while
+          // the Tema sheet's live preview is flipping between options; the
+          // rest of the app (and its own heavier AppState.notifyListeners()
+          // fan-out) stays untouched until the choice is actually confirmed.
+          return ValueListenableBuilder<String?>(
+            valueListenable: appState.themePreviewOverride,
+            builder: (context, preview, _) {
+              return MaterialApp(
+                title: 'Suma',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.light(),
+                darkTheme: AppTheme.dark(),
+                themeMode: _themeModeFor(preview ?? themePref),
+                home: const _RootRouter(),
+              );
+            },
           );
         },
       ),

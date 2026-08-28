@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../utils/goal_trend.dart';
 import '../utils/responsive.dart';
 import '../utils/units.dart';
+import '../widgets/suma_glass_sheet.dart';
 import '../widgets/suma_widgets.dart';
 import '../widgets/weight_line_chart.dart';
 import 'entry_form_sheet.dart';
@@ -39,7 +40,11 @@ class _Row {
 /// at - selecting more than one overlays them on the same chart and tags
 /// every row with whose entry it is, for comparison.
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  // Bumped by HomeScreen each time this tab becomes active again - see
+  // DashboardScreen.revealToken for why.
+  final Object revealToken;
+
+  const HistoryScreen({super.key, required this.revealToken});
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -192,10 +197,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       _PeriodFilter(selected: _filterDays, onChanged: (v) => setState(() => _filterDays = v)),
                       const SizedBox(height: 14),
                       SumaCard(
-                        child: WeightLineChart(series: chartSeries, unitPref: unitPref),
+                        child: WeightLineChart(series: chartSeries, unitPref: unitPref, revealToken: widget.revealToken),
                       ),
                       const SizedBox(height: 14),
-                      if (selected.length == 1 && rows.isNotEmpty) _SummaryRow(entries: rows.map((r) => r.entry).toList(), unitPref: unitPref),
+                      if (selected.length == 1 && rows.isNotEmpty)
+                        _SummaryRow(
+                          entries: rows.map((r) => r.entry).toList(),
+                          unitPref: unitPref,
+                          // The goal of whoever is actually selected (an
+                          // admin viewing one other member sees that
+                          // member's own goal, not their own).
+                          goalWeightKg: pickable.firstWhere((p) => p.id == selected.first).goalWeightKg,
+                          goalType: pickable.firstWhere((p) => p.id == selected.first).goalType,
+                          revealToken: widget.revealToken,
+                        ),
                       const SizedBox(height: 18),
                       for (final entry in groups.entries) ...[
                         SectionLabel(entry.key),
@@ -253,16 +268,67 @@ class _MemberPicker extends StatelessWidget {
       child: Row(
         children: [
           for (final member in members) ...[
-            FilterChip(
-              label: Text(member.name),
-              avatar: CircleAvatar(backgroundColor: colorFor(member.id), radius: 6),
-              selected: selected.contains(member.id),
-              onSelected: (_) => onToggle(member.id),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
-            ),
+            _MemberChip(member: member, color: colorFor(member.id), selected: selected.contains(member.id), onTap: () => onToggle(member.id)),
             const SizedBox(width: 8),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Same flat-glass-pill recipe as [_PeriodChip], but showing the person's
+/// own photo and just their first name instead of a plain text label - the
+/// full name/colored-dot FilterChip felt out of place next to the period
+/// selector's glass pills.
+class _MemberChip extends StatelessWidget {
+  final Profile member;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+  const _MemberChip({required this.member, required this.color, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(100),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(100),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutBack,
+              padding: const EdgeInsets.fromLTRB(6, 6, 14, 6),
+              decoration: BoxDecoration(
+                color: selected ? color.withValues(alpha: 0.16) : (dark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(color: selected ? color.withValues(alpha: 0.6) : scheme.outlineVariant.withValues(alpha: dark ? 0.3 : 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(1.6),
+                    decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? color : Colors.transparent, width: 1.6)),
+                    child: UserAvatar(avatarUrl: member.avatarUrl, name: member.name, radius: 11),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w700 : FontWeight.w500, color: selected ? color : scheme.onSurfaceVariant),
+                    child: Text(member.firstName),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -325,7 +391,17 @@ class _PeriodChip extends StatelessWidget {
             onTap: onTap,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutBack,
+              // Not easeOutBack here - "back" curves briefly overshoot past
+              // their target (that's what makes them bounce), and this
+              // container's boxShadow animates between a real shadow and
+              // none. An overshot progress value made BoxShadow.lerp compute
+              // a momentarily *negative* blurRadius, which crashes with
+              // "Text shadow blur radius should be non-negative" - Flutter
+              // reuses that assertion for BoxShadow too, since it's built on
+              // the same Shadow class as actual text shadows. The bounce
+              // itself still reads fine on the AnimatedScale below, which
+              // only ever animates between two small positive numbers.
+              curve: Curves.easeOutCubic,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
                 color: selected ? scheme.primary : (dark ? AppColors.darkSurface : AppColors.lightSurface).withValues(alpha: 0.7),
@@ -356,9 +432,12 @@ class _PeriodChip extends StatelessWidget {
 }
 
 class _SummaryRow extends StatelessWidget {
-  final List<WeightEntry> entries;
+  final List<WeightEntry> entries; // DESC
   final String unitPref;
-  const _SummaryRow({required this.entries, required this.unitPref});
+  final double? goalWeightKg;
+  final String goalType;
+  final Object revealToken;
+  const _SummaryRow({required this.entries, required this.unitPref, required this.goalWeightKg, required this.goalType, required this.revealToken});
 
   @override
   Widget build(BuildContext context) {
@@ -367,14 +446,54 @@ class _SummaryRow extends StatelessWidget {
     final min = values.reduce((a, b) => a < b ? a : b);
     final max = values.reduce((a, b) => a > b ? a : b);
 
-    return StatGrid(
-      children: [
-        StatTile(icon: Icons.show_chart_rounded, color: Theme.of(context).colorScheme.primary, label: 'Média', value: Units.formatWithUnit(avg, unitPref)),
-        StatTile(icon: Icons.arrow_downward_rounded, color: AppColors.positive, label: 'Mínimo', value: Units.formatWithUnit(min, unitPref)),
-        StatTile(icon: Icons.arrow_upward_rounded, color: AppColors.negative, label: 'Máximo', value: Units.formatWithUnit(max, unitPref)),
-        StatTile(icon: Icons.numbers_rounded, color: AppColors.hydrationAccent, label: 'Registros', value: '${entries.length}'),
+    // "Nesse período" and the per-week/per-month rate below need at least
+    // two points spanning some real time - a single entry has nothing to
+    // compare against.
+    final newest = entries.first;
+    final oldest = entries.last;
+    final periodDeltaKg = newest.weightKg - oldest.weightKg;
+    final daysSpan = newest.date.difference(oldest.date).inDays;
+    final periodTrend = entries.length > 1 ? goalTrendPositive(fromKg: oldest.weightKg, toKg: newest.weightKg, goalWeightKg: goalWeightKg, goalType: goalType) : null;
+    // Short spans (up to ~3 months, whether that's a preset chip or a
+    // custom picked date) read naturally as a weekly pace; longer ones are
+    // long enough that a monthly pace is the more useful number.
+    final perWeek = daysSpan <= 90;
+    final rate = daysSpan > 0 ? periodDeltaKg / (daysSpan / (perWeek ? 7 : 30)) : null;
+
+    String signed(double kg) {
+      final v = Units.displayValue(kg, unitPref);
+      final prefix = v > 0.05 ? '+' : ''; // toStringAsFixed already carries the "-" for negatives
+      return '$prefix${v.toStringAsFixed(1)} ${Units.label(unitPref)}';
+    }
+
+    final tiles = <Widget>[
+      StatTile(icon: Icons.show_chart_rounded, color: Theme.of(context).colorScheme.primary, label: 'Média', value: Units.formatWithUnit(avg, unitPref)),
+      StatTile(icon: Icons.arrow_downward_rounded, color: AppColors.positive, label: 'Mínimo', value: Units.formatWithUnit(min, unitPref)),
+      StatTile(icon: Icons.arrow_upward_rounded, color: AppColors.negative, label: 'Máximo', value: Units.formatWithUnit(max, unitPref)),
+      StatTile(icon: Icons.numbers_rounded, color: AppColors.hydrationAccent, label: 'Registros', value: '${entries.length}'),
+      if (entries.length > 1) ...[
+        StatTile(
+          icon: periodDeltaKg <= 0 ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+          color: Theme.of(context).colorScheme.primary,
+          label: 'Nesse período',
+          value: signed(periodDeltaKg),
+          trendPositive: periodTrend,
+        ),
+        if (rate != null)
+          StatTile(
+            icon: Icons.speed_rounded,
+            color: Theme.of(context).colorScheme.primary,
+            label: perWeek ? 'Média por semana' : 'Média por mês',
+            value: signed(rate),
+            trendPositive: periodTrend,
+          ),
       ],
-    );
+    ];
+
+    // All tiles fit on one line on desktop instead of wrapping to a second
+    // row - there's easily enough width once the content column is as wide
+    // as it gets there.
+    return KeyedSubtree(key: ValueKey('stats_$revealToken'), child: StatGrid(desktopColumns: tiles.length, children: tiles));
   }
 }
 
@@ -464,15 +583,37 @@ class _HistoryTile extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context, WeightEntry entry) async {
     final appState = context.read<AppState>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir registro?'),
-        content: Text('O registro de ${DateFormat('dd/MM/yyyy').format(entry.date)} será removido permanentemente.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir')),
-        ],
+    final confirmed = await showSumaGlassSheet<bool>(
+      context,
+      maxWidth: 360,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Excluir registro?', style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            Text(
+              'O registro de ${DateFormat('dd/MM/yyyy').format(entry.date)} será removido permanentemente.',
+              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar'))),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+                    child: const Text('Excluir'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed == true) {

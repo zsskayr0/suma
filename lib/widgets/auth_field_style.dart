@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// A soft, muted blue used sparingly on the auth screens (focused field
 /// borders) - the reference design is otherwise strictly black/white, so
@@ -107,17 +108,19 @@ class AuthSocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor = authTextColor(context);
     Widget icon;
     switch (provider) {
       case AuthSocialProvider.facebook:
-        icon = Image.asset('assets/branding/facebook_logo.png', width: 20, height: 20);
+        icon = SvgPicture.asset('assets/icons/facebook_logo.svg', width: 20, height: 20);
         break;
       case AuthSocialProvider.google:
-        icon = Image.asset('assets/branding/google_logo.png', width: 20, height: 20);
+        icon = SvgPicture.asset('assets/icons/google_logo.svg', width: 20, height: 20);
         break;
       case AuthSocialProvider.apple:
-        icon = Icon(Icons.apple, size: 19, color: textColor);
+        // Apple's logo is a single black/white glyph (no built-in tinting),
+        // so pick the variant that reads correctly against the current
+        // theme instead of colorFilter-ing a multi-tone mark.
+        icon = SvgPicture.asset(isAuthDark(context) ? 'assets/icons/apple_logo_white.svg' : 'assets/icons/apple_logo_black.svg', width: 19, height: 19);
         break;
     }
     return OutlinedButton(

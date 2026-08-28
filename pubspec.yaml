@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.5+6
+version: 1.0.6+7
 
 environment:
   sdk: ^3.13.1
@@ -71,6 +71,19 @@ dependencies:
   # deliberately don't sync through the account - see AppState.themePref.
   shared_preferences: ^2.3.3
 
+  # Renders the custom "Usuários" nav glyph (assets/icons/nav_usuarios.svg) -
+  # already a transitive dep via heroicons, promoted to direct since we now
+  # use it ourselves too.
+  flutter_svg: ^2.3.0
+
+  # Local weigh-in reminders (Ajustes > Notificações) - scheduled per
+  # weekday/time. timezone/flutter_timezone exist only so the schedule fires
+  # at the device's actual local time instead of UTC.
+  flutter_local_notifications: ^22.3.0
+  timezone: ^0.11.1
+  flutter_timezone: ^5.1.0
+  url_launcher: ^6.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -110,8 +123,13 @@ flutter:
     - assets/branding/suma_mark.png
     - assets/branding/suma_wordmark.png
     - assets/branding/auth_wave.jpg
-    - assets/branding/google_logo.png
-    - assets/branding/facebook_logo.png
+    - assets/icons/nav_usuarios.svg
+    - assets/icons/nav_estatisticas.svg
+    - assets/icons/nav_historico.svg
+    - assets/icons/apple_logo_black.svg
+    - assets/icons/apple_logo_white.svg
+    - assets/icons/google_logo.svg
+    - assets/icons/facebook_logo.svg
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

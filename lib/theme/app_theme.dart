@@ -24,6 +24,15 @@ class AppColors {
   static const Color negative = Color(0xFFE5484D);
   static const Color goalAccent = green;
 
+  /// Role-coded avatar ring/flag color - admin gets a verde-água (aqua/
+  /// turquoise) outline, everyone else a azul-bebê (baby blue) one. Used
+  /// wherever a person's own avatar or role badge is shown (Perfil,
+  /// Usuários) so role reads at a glance without needing to read the text.
+  static const Color adminRing = Color(0xFF2EC4B6);
+  static const Color memberRing = Color(0xFF8ECAE6);
+
+  static Color roleRing(bool isAdmin) => isAdmin ? adminRing : memberRing;
+
   // Grouped background tones - light stays close to iOS system-gray. Dark
   // is true black with plain gray surfaces (no brand tint) so the palette
   // reads purely through accents, not through the background itself.
@@ -79,9 +88,14 @@ class AppTheme {
       // closer to an iOS/Notion tap than stock Android 12+.
       splashFactory: InkRipple.splashFactory,
       highlightColor: Colors.transparent,
-      // Inter instead of the platform default (Roboto/Segoe) - a rounder,
-      // more "app-native" feel closer to the iOS/Notion reference look.
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+      // Poppins instead of the platform default (Roboto/Segoe) - a rounder,
+      // more geometric "app-native" feel closer to the iOS/Notion reference
+      // look. Applied once across the whole type scale, so every Text style
+      // built from Theme.of(context).textTheme (which is virtually all of
+      // them - see e.g. StatTile, SectionLabel) picks it up automatically,
+      // at whatever weight (light/regular/medium/bold) that style already
+      // specifies - Poppins covers the full range Suma actually uses.
+      textTheme: GoogleFonts.poppinsTextTheme(base.textTheme).apply(
         bodyColor: scheme.onSurface,
         displayColor: scheme.onSurface,
       ),

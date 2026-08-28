@@ -57,13 +57,11 @@ class GoalEditor extends StatelessWidget {
         ),
         if (hasGoal) ...[
           const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'lose', icon: Icon(Icons.trending_down_rounded), label: Text('Emagrecer')),
-              ButtonSegment(value: 'gain', icon: Icon(Icons.trending_up_rounded), label: Text('Ganhar peso')),
-            ],
-            selected: {goalType},
-            onSelectionChanged: (s) => onGoalTypeChanged(s.first),
+          PillSwitcher<String>(
+            values: const ['lose', 'gain'],
+            labels: const ['Emagrecer', 'Ganhar peso'],
+            selected: goalType,
+            onChanged: onGoalTypeChanged,
           ),
           const SizedBox(height: 12),
           StepperField(

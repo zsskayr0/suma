@@ -41,7 +41,23 @@ Future<T?> showSumaGlassSheet<T>(
                   border: Border.all(color: scheme.outlineVariant.withValues(alpha: dark ? 0.3 : 0.5)),
                   boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: dark ? 0.45 : 0.12), blurRadius: 32, offset: const Offset(0, 16))],
                 ),
-                child: ClipRRect(borderRadius: BorderRadius.circular(24), child: builder(ctx)),
+                // Without a Material ancestor, Text widgets that don't set
+                // their own fontSize fall back to Flutter's bare
+                // WidgetsApp default instead of the app's actual type
+                // scale - which is a lot bigger, not smaller, and is
+                // exactly what made "Masculino" render enormous here.
+                // MaterialType.transparency paints nothing on its own (the
+                // DecoratedBox above already handles the panel's
+                // background) but properly scopes DefaultTextStyle/
+                // IconTheme/ink for everything inside.
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    textStyle: Theme.of(ctx).textTheme.bodyMedium,
+                    child: builder(ctx),
+                  ),
+                ),
               ),
             ),
           ),
@@ -50,20 +66,51 @@ Future<T?> showSumaGlassSheet<T>(
     },
     transitionBuilder: (ctx, anim, secAnim, child) {
       final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-      // A soft, "ofuscado" blur (not a hard frosted wall) over the rest of
-      // the screen - just enough to pull focus onto the panel.
-      return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14 * anim.value, sigmaY: 14 * anim.value),
-        child: ColoredBox(
-          color: Colors.black.withValues(alpha: 0.22 * anim.value),
-          child: FadeTransition(
-            opacity: anim,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
-              child: child,
+      // The full-screen blur used to be a single ColoredBox wrapping the
+      // panel too - ColoredBox always counts as hit-testable (it paints),
+      // so it silently absorbed every tap anywhere on screen before it
+      // could reach the barrier underneath, breaking tap-outside-to-dismiss
+      // everywhere this sheet is used. Splitting it into its own Stack
+      // layer - with an explicit dismiss tap handler - and the panel as a
+      // separate layer on top fixes that: taps that land on the panel are
+      // absorbed by *it* (Material paints, so it's hit-testable) before
+      // reaching this layer, but taps anywhere else now actually dismiss.
+      return Stack(
+        children: [
+          // RepaintBoundary here is load-bearing, not defensive: anything
+          // animating in the panel (the theme picker's sun/moon icon, the
+          // notification sheet's clock hands, ...) sits in a *sibling*
+          // layer, but without isolating each side Flutter still re-walks
+          // this whole Stack - including re-executing the blur - on every
+          // one of that animation's frames, even though the blur's own
+          // inputs haven't changed. BackdropFilter is already one of the
+          // most expensive things Flutter can paint; redoing it 60x/sec
+          // because of an unrelated icon animating nearby is what was
+          // actually making the theme picker stutter, not the theme
+          // switch itself. Isolating both sides lets Flutter cache the
+          // blur's layer across frames where it hasn't changed.
+          RepaintBoundary(
+            child: Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(ctx).maybePop(),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 14 * anim.value, sigmaY: 14 * anim.value),
+                  child: ColoredBox(color: Colors.black.withValues(alpha: 0.22 * anim.value)),
+                ),
+              ),
             ),
           ),
-        ),
+          RepaintBoundary(
+            child: FadeTransition(
+              opacity: anim,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.94, end: 1.0).animate(curved),
+                child: child,
+              ),
+            ),
+          ),
+        ],
       );
     },
   );

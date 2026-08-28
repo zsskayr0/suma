@@ -62,25 +62,69 @@ class UserAvatar extends StatelessWidget {
   final String? avatarUrl;
   final String name;
   final double radius;
+  // When set, draws a role-colored ring around the avatar - verde-água for
+  // the family admin, azul-bebê for everyone else (see AppColors.roleRing).
+  // Left null wherever the ring would mean something else (e.g. Histórico's
+  // member-picker chips already use a ring for *selection*).
+  final bool? isAdmin;
 
-  const UserAvatar({super.key, required this.avatarUrl, required this.name, this.radius = 20});
+  const UserAvatar({super.key, required this.avatarUrl, required this.name, this.radius = 20, this.isAdmin});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final url = avatarUrl;
-    if (url != null && url.isNotEmpty) {
-      return CircleAvatar(radius: radius, backgroundColor: scheme.primary.withValues(alpha: 0.16), backgroundImage: NetworkImage(url));
-    }
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: scheme.primary.withValues(alpha: 0.16),
-      child: Text(
-        name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
-        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: radius * 0.72),
+    final admin = isAdmin;
+    // The ring is drawn *inside* the requested radius (like an Instagram
+    // story ring), not added on top of it - growing the total footprint
+    // broke tight layouts that size around `radius` exactly (the mobile
+    // bottom nav's Perfil slot overflowed by ~9px once the ring padded
+    // the widget larger than its parent expected).
+    final ringWidth = admin == null ? 0.0 : (radius * 0.09 + 1.4).clamp(1.6, 3.0);
+    final innerRadius = radius - ringWidth - (admin == null ? 0 : 1);
+
+    final inner = (url != null && url.isNotEmpty)
+        ? CircleAvatar(radius: innerRadius, backgroundColor: scheme.primary.withValues(alpha: 0.16), backgroundImage: NetworkImage(url))
+        : CircleAvatar(
+            radius: innerRadius,
+            backgroundColor: scheme.primary.withValues(alpha: 0.16),
+            child: Text(
+              name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase(),
+              style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, fontSize: innerRadius * 0.72),
+            ),
+          );
+
+    if (admin == null) return inner;
+    return SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(size: Size(radius * 2, radius * 2), painter: _RingPainter(color: AppColors.roleRing(admin), width: ringWidth)),
+          inner,
+        ],
       ),
     );
   }
+}
+
+class _RingPainter extends CustomPainter {
+  final Color color;
+  final double width;
+  const _RingPainter({required this.color, required this.width});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width;
+    canvas.drawCircle(size.center(Offset.zero), size.width / 2 - width / 2, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) => oldDelegate.color != color || oldDelegate.width != width;
 }
 
 /// A pill-shaped switcher with an animated sliding selected background - the
@@ -249,11 +293,15 @@ class _RollingStatValue extends StatelessWidget {
 /// wider windows (see [Responsive.statColumns]).
 class StatGrid extends StatelessWidget {
   final List<Widget> children;
-  const StatGrid({super.key, required this.children});
+  // Overrides the desktop-width column count only (tablet/phone still fall
+  // back to Responsive.statColumns) - Histórico uses this to fit every
+  // summary tile in a single row instead of wrapping to a second line.
+  final int? desktopColumns;
+  const StatGrid({super.key, required this.children, this.desktopColumns});
 
   @override
   Widget build(BuildContext context) {
-    final columns = Responsive.statColumns(context);
+    final columns = desktopColumns != null && Responsive.isDesktop(context) ? desktopColumns! : Responsive.statColumns(context);
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),

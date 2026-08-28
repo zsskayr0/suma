@@ -264,7 +264,7 @@ class _MemberCard extends StatelessWidget {
     return SumaCard(
       child: Row(
         children: [
-          UserAvatar(avatarUrl: member.avatarUrl, name: member.name, radius: 22),
+          UserAvatar(avatarUrl: member.avatarUrl, name: member.name, radius: 22, isAdmin: member.isAdmin),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -280,7 +280,7 @@ class _MemberCard extends StatelessWidget {
               ],
             ),
           ),
-          Pill(text: member.isAdmin ? 'Admin' : 'Membro', color: member.isAdmin ? AppColors.goalAccent : scheme.primary),
+          Pill(text: member.isAdmin ? 'Admin' : 'Membro', color: AppColors.roleRing(member.isAdmin)),
           if (isAdmin) ...[
             const SizedBox(width: 4),
             PopupMenuButton<String>(

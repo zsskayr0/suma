@@ -82,6 +82,11 @@ class WeightLineChart extends StatefulWidget {
   final String unitPref;
   final double? goalWeightKg;
   final double height;
+  // Bump this (e.g. a counter that increments each time the screen holding
+  // this chart becomes the active tab again) to replay the "line draws
+  // itself in" reveal - normally that only plays once, the very first time
+  // the chart mounts.
+  final Object? revealToken;
 
   const WeightLineChart({
     super.key,
@@ -89,6 +94,7 @@ class WeightLineChart extends StatefulWidget {
     required this.unitPref,
     this.goalWeightKg,
     this.height = 190,
+    this.revealToken,
   });
 
   @override
@@ -121,6 +127,9 @@ class _WeightLineChartState extends State<WeightLineChart> with TickerProviderSt
   @override
   void didUpdateWidget(covariant WeightLineChart oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.revealToken != null && widget.revealToken != oldWidget.revealToken) {
+      _revealCtrl.forward(from: 0);
+    }
     if (_sameData(oldWidget.series, widget.series)) return;
 
     final newNonEmpty = widget.series.where((s) => s.entries.isNotEmpty).toList();
@@ -321,8 +330,9 @@ class _ChartPainter extends CustomPainter {
     const bottomPad = 20.0;
     const topPad = 26.0; // extra room for peak/trough bubbles
     const sidePad = 2.0;
+    const leftPad = 32.0; // room for the Y-axis reference labels
     final chartHeight = size.height - bottomPad - topPad;
-    final chartLeft = sidePad;
+    final chartLeft = leftPad;
     final chartRight = size.width - sidePad;
 
     final minDateMs = domain.minDateMs;
@@ -344,19 +354,38 @@ class _ChartPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    // Horizontal gridlines.
+    // Horizontal gridlines, each labeled with the value it sits at on the
+    // left - turns the fill from a plain silhouette into something you can
+    // actually read a number off of without touching the chart.
     final gridPaint = Paint()
       ..color = gridColor
       ..strokeWidth = 1;
     for (var i = 0; i <= 2; i++) {
       final y = topPad + chartHeight * i / 2;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(chartLeft, y), Offset(chartRight, y), gridPaint);
+      // minV/maxV are already in the user's display unit (see _domainFor),
+      // unlike entry.weightKg elsewhere in this file - format directly
+      // instead of going through Units.format, which expects raw kg and
+      // would convert a second time.
+      final v = maxV - (maxV - minV) * i / 2;
+      _drawYLabel(canvas, v.toStringAsFixed(1), y);
     }
 
     // Goal dashed line.
     final displayGoal = goalWeightKg != null ? Units.displayValue(goalWeightKg!, unitPref) : null;
     if (displayGoal != null) {
-      _drawDashedLine(canvas, Offset(0, yFor(displayGoal)), Offset(size.width, yFor(displayGoal)), series.first.color.withValues(alpha: 0.55));
+      _drawDashedLine(canvas, Offset(chartLeft, yFor(displayGoal)), Offset(chartRight, yFor(displayGoal)), series.first.color.withValues(alpha: 0.55));
+      _drawLabel(canvas, 'Meta', Offset(chartRight, yFor(displayGoal) - 14), TextAlign.right, color: series.first.color);
+    }
+
+    // Average reference line - only for a single series (a multi-person
+    // comparison has no single "average" that means anything at a glance).
+    if (singleSeriesFill && series.first.entries.length > 2) {
+      final vals = series.first.entries.map((e) => Units.displayValue(e.weightKg, unitPref));
+      final avg = vals.reduce((a, b) => a + b) / vals.length;
+      if (displayGoal == null || (avg - displayGoal).abs() > (maxV - minV) * 0.04) {
+        _drawDashedLine(canvas, Offset(chartLeft, yFor(avg)), Offset(chartRight, yFor(avg)), labelColor.withValues(alpha: 0.55));
+      }
     }
 
     for (final s in series) {
@@ -448,8 +477,16 @@ class _ChartPainter extends CustomPainter {
 
     canvas.restore();
 
-    _drawLabel(canvas, DateFormat('dd/MM/yyyy').format(DateTime.fromMillisecondsSinceEpoch(domain.minDateMs.round())), Offset(sidePad, size.height - bottomPad + 4), TextAlign.left);
-    _drawLabel(canvas, DateFormat('dd/MM').format(DateTime.fromMillisecondsSinceEpoch(domain.maxDateMs.round())), Offset(size.width - sidePad, size.height - bottomPad + 4), TextAlign.right);
+    final bottomY = size.height - bottomPad + 4;
+    _drawLabel(canvas, DateFormat('dd/MM/yyyy').format(DateTime.fromMillisecondsSinceEpoch(domain.minDateMs.round())), Offset(chartLeft, bottomY), TextAlign.left);
+    _drawLabel(canvas, DateFormat('dd/MM').format(DateTime.fromMillisecondsSinceEpoch(domain.maxDateMs.round())), Offset(chartRight, bottomY), TextAlign.right);
+    // Extra in-between dates - only once there's enough room for them not
+    // to crowd into the start/end labels (roughly tablet width and up).
+    if (chartRight - chartLeft > 340) {
+      DateTime dateAtFraction(double f) => DateTime.fromMillisecondsSinceEpoch((minDateMs + f * totalMs).round());
+      _drawLabel(canvas, DateFormat('dd/MM').format(dateAtFraction(1 / 3)), Offset(chartLeft + (chartRight - chartLeft) / 3, bottomY), TextAlign.center);
+      _drawLabel(canvas, DateFormat('dd/MM').format(dateAtFraction(2 / 3)), Offset(chartLeft + (chartRight - chartLeft) * 2 / 3, bottomY), TextAlign.center);
+    }
 
     // Touch/drag tooltip: nearest entry per series to the touched date.
     final t = touch;
@@ -555,9 +592,9 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  void _drawLabel(Canvas canvas, String text, Offset anchor, TextAlign align) {
+  void _drawLabel(Canvas canvas, String text, Offset anchor, TextAlign align, {Color? color}) {
     final painter = TextPainter(
-      text: TextSpan(text: text, style: TextStyle(fontSize: 11, color: labelColor, fontWeight: FontWeight.w500)),
+      text: TextSpan(text: text, style: TextStyle(fontSize: 11, color: color ?? labelColor, fontWeight: FontWeight.w500)),
       textDirection: ui.TextDirection.ltr,
     )..layout();
     double dx;
@@ -572,6 +609,17 @@ class _ChartPainter extends CustomPainter {
         dx = anchor.dx;
     }
     painter.paint(canvas, Offset(dx, anchor.dy));
+  }
+
+  /// Right-aligned and vertically centered on [y] - used for the Y-axis
+  /// gridline value labels, which sit just left of the plot area rather
+  /// than anchored to its top/bottom edge like [_drawLabel]'s callers.
+  void _drawYLabel(Canvas canvas, String text, double y) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: TextStyle(fontSize: 10, color: labelColor.withValues(alpha: 0.85), fontWeight: FontWeight.w500)),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(28 - painter.width, y - painter.height / 2));
   }
 
   @override

@@ -21,7 +21,11 @@ class Profile {
   final String? sex; // 'male', 'female' or 'unspecified'
   final double? goalWeightKg;
   final String goalType; // 'lose' or 'gain'
-  final double? goalStartWeightKg; // snapshot of current weight when the goal was last set
+  // Snapshot of the weight when the goal was last set - kept around (still
+  // written on goal creation) but no longer read for progress: that's now
+  // always measured against the weight from exactly a year ago, a rolling
+  // window instead of a fixed point in time. See goalBaselineWeightKg().
+  final double? goalStartWeightKg;
   final String unitPref; // 'kg' or 'lb'
   final bool onboarded;
   final DateTime createdAt;

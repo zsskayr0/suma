@@ -37,3 +37,7 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Packaged release artifacts (built locally, uploaded to GitHub Releases,
+# never committed - see the "faça a release" workflow).
+/dist/

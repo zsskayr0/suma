@@ -17,8 +17,8 @@ consigo fazer por você — precisa de uma conta sua.
 
 1. No painel do projeto, vá em **SQL Editor** (ícone de terminal na barra
    lateral) → **New query**.
-2. Cole o conteúdo inteiro de [`schema.sql`](./schema.sql) (deste mesmo
-   diretório) e clique em **Run**.
+2. Cole o conteúdo inteiro de [`000_schema.sql`](./000_schema.sql) (deste
+   mesmo diretório) e clique em **Run**.
 3. Deve terminar sem erro. Se der algum erro, me manda a mensagem completa
    que eu ajusto o script.
 
@@ -37,7 +37,7 @@ consigo fazer por você — precisa de uma conta sua.
    - **Project URL** (algo como `https://xxxxxxxxxxxx.supabase.co`)
    - **anon public** key (uma string longa - é segura pra colocar no app,
      é a chave pública protegida pelas regras de RLS que já estão no
-     `schema.sql`)
+     `000_schema.sql`)
 3. Me manda os dois valores (pode ser aqui mesmo no chat) que eu já deixo o
    app conectado.
 

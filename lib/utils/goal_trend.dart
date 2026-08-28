@@ -1,3 +1,21 @@
+import '../models/entry.dart';
+
+/// The weight a goal's progress is measured against: the entry closest to
+/// (but not after) exactly one year ago, so progress always reflects "how
+/// have you done over the last year" - a rolling window, not a fixed
+/// snapshot from whenever the goal happened to be set. Falls back to the
+/// oldest entry on file if there isn't a full year of history yet.
+///
+/// [entriesDesc] must be sorted newest-first (date DESC), same order
+/// [AppState.entries] and `entriesFor()` already return.
+double goalBaselineWeightKg(List<WeightEntry> entriesDesc) {
+  final target = DateTime.now().subtract(const Duration(days: 365));
+  for (final e in entriesDesc) {
+    if (!e.date.isAfter(target)) return e.weightKg;
+  }
+  return entriesDesc.last.weightKg;
+}
+
 /// Whether a weight change from [fromKg] to [toKg] moves someone closer to
 /// their goal (used to color variação indicators green/red - not simply by
 /// "went up" vs "went down", since that depends on whether they're trying to

@@ -7,11 +7,27 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/entry.dart';
 import '../models/family.dart';
 import '../models/profile.dart';
+import '../services/notification_service.dart';
 
 /// SharedPreferences key for the device-local theme preference - exposed
 /// (not private) so main.dart can read it before the first frame, without
 /// waiting on AppState/bootstrap.
 const themePrefStorageKey = 'suma.theme_pref';
+
+/// SharedPreferences key for the device-local height display unit ('cm' or
+/// 'in') - same reasoning as [themePrefStorageKey]: how measurements are
+/// *shown* on this device, not account data. See [AppState.heightUnitPref].
+const heightUnitPrefStorageKey = 'suma.height_unit_pref';
+
+/// SharedPreferences keys for the device-local weigh-in reminder settings -
+/// exposed so main.dart can read them before the first frame and re-arm the
+/// schedule at startup (covers app updates/reinstalls, which clear Android's
+/// AlarmManager state but not SharedPreferences). See
+/// [AppState.updateNotificationSettings] and [NotificationService].
+const notifEnabledStorageKey = 'suma.notif_enabled';
+const notifDaysStorageKey = 'suma.notif_days'; // comma-separated DateTime.weekday ints (1=Mon..7=Sun)
+const notifHourStorageKey = 'suma.notif_hour';
+const notifMinuteStorageKey = 'suma.notif_minute';
 
 enum AppPhase { loading, needsAuth, needsOnboarding, ready }
 
@@ -40,9 +56,41 @@ class AppState extends ChangeNotifier {
   /// MaterialApp's themeMode, independent of who's signed in.
   String themePref;
 
+  /// A transient, in-flight preview of [themePref] while the Tema sheet is
+  /// open - deliberately NOT wired through notifyListeners()/SharedPreferences
+  /// like [updateThemePref] is. That version's full app-wide notify + disk
+  /// write on every single tap, stacked on top of the sheet's own live
+  /// backdrop-blur animation, was heavy enough to visibly stutter the
+  /// picker's sun/moon animation. main.dart listens to this directly via a
+  /// ValueListenableBuilder scoped to just the MaterialApp theme switch, so
+  /// previewing a mode while flipping through options stays cheap - only
+  /// the *final* choice (on "Confirmar") goes through the real,
+  /// persisted/broadcast update.
+  final ValueNotifier<String?> themePreviewOverride = ValueNotifier(null);
+
+  /// 'cm' or 'in' - device-local, same reasoning as [themePref]. Weight's
+  /// unit ([Profile.unitPref]) is genuine account data (you'd want your kg/lb
+  /// choice to follow you to a new phone); this one is purely presentational.
+  String heightUnitPref;
+
+  /// Weigh-in reminder settings - device-local, same reasoning as
+  /// [themePref]. [notifDays] holds DateTime.weekday values (1=Mon..7=Sun).
+  /// See [updateNotificationSettings] and [NotificationService].
+  bool notifEnabled;
+  Set<int> notifDays;
+  int notifHour;
+  int notifMinute;
+
   StreamSubscription<AuthState>? _authSub;
 
-  AppState({this.themePref = 'system'});
+  AppState({
+    this.themePref = 'system',
+    this.heightUnitPref = 'cm',
+    this.notifEnabled = false,
+    Set<int>? notifDays,
+    this.notifHour = 8,
+    this.notifMinute = 0,
+  }) : notifDays = notifDays ?? {1, 2, 3, 4, 5, 6, 7};
 
   void bootstrap() {
     _authSub = _client.auth.onAuthStateChange.listen((data) {
@@ -53,6 +101,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _authSub?.cancel();
+    themePreviewOverride.dispose();
     super.dispose();
   }
 
@@ -275,6 +324,43 @@ class AppState extends ChangeNotifier {
     await prefs.setString(themePrefStorageKey, pref);
   }
 
+  /// Persists the reminder settings and re-arms [NotificationService]'s
+  /// schedule to match - same device-local, optimistic-update reasoning as
+  /// [updateThemePref]. Always writes all four fields together so the saved
+  /// state can never end up with e.g. days chosen but no saved time.
+  Future<void> updateNotificationSettings({
+    required bool enabled,
+    required Set<int> days,
+    required int hour,
+    required int minute,
+  }) async {
+    notifEnabled = enabled;
+    notifDays = days;
+    notifHour = hour;
+    notifMinute = minute;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(notifEnabledStorageKey, enabled);
+    await prefs.setString(notifDaysStorageKey, days.join(','));
+    await prefs.setInt(notifHourStorageKey, hour);
+    await prefs.setInt(notifMinuteStorageKey, minute);
+
+    if (enabled && days.isNotEmpty) {
+      await NotificationService.instance.scheduleWeekly(weekdays: days, hour: hour, minute: minute);
+    } else {
+      await NotificationService.instance.cancelAll();
+    }
+  }
+
+  /// Same reasoning/pattern as [updateThemePref].
+  Future<void> updateHeightUnitPref(String pref) async {
+    heightUnitPref = pref;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(heightUnitPrefStorageKey, pref);
+  }
+
   /// Same optimistic-update reasoning as [updateThemePref].
   Future<void> updateUnitPref(String unitPref) async {
     final previous = currentProfile;
@@ -318,8 +404,21 @@ class AppState extends ChangeNotifier {
       currentProfile = currentProfile!.copyWith(avatarUrl: url);
       notifyListeners();
       return null;
+    } on StorageException catch (e) {
+      // Surfaces the real reason (bucket missing, RLS policy missing/
+      // denying, etc.) instead of a generic message - this call fails
+      // outright if supabase/005_avatars.sql was never run (no "avatars"
+      // bucket, no upload policy), and a vague error made that
+      // impossible to tell apart from an actual network/transient issue.
+      if (e.statusCode == '404' || e.message.toLowerCase().contains('bucket not found')) {
+        return 'O bucket "avatars" não existe no Supabase - rode a migration supabase/005_avatars.sql.';
+      }
+      if (e.statusCode == '403' || e.message.toLowerCase().contains('row-level security') || e.message.toLowerCase().contains('policy')) {
+        return 'Sem permissão pra enviar a foto - confira se supabase/005_avatars.sql foi rodada (policies do bucket "avatars").';
+      }
+      return 'Não foi possível enviar a foto: ${e.message}';
     } catch (e) {
-      return 'Não foi possível enviar a foto. Tente novamente.';
+      return 'Não foi possível enviar a foto. Tente novamente. ($e)';
     }
   }
 

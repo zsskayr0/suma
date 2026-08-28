@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
 import 'suma_widgets.dart';
@@ -9,12 +10,16 @@ class BottomNavEntry {
   final String label;
   final IconData icon;
   final IconData selectedIcon;
+  // When set, renders this SVG asset instead of [icon]/[selectedIcon],
+  // tinted the same way an Icon would be - used for "Usuários" (a custom
+  // two-people glyph, lighter than Material's group icon).
+  final String? svgAsset;
   // When set, this destination renders the person's profile photo (falling
   // back to their initial) instead of [icon]/[selectedIcon] - used for the
   // "Perfil" tab so it doubles as an avatar, matching the reference mockup.
   final String? avatarName;
   final String? avatarUrl;
-  const BottomNavEntry({required this.label, required this.icon, required this.selectedIcon, this.avatarName, this.avatarUrl});
+  const BottomNavEntry({required this.label, required this.icon, required this.selectedIcon, this.svgAsset, this.avatarName, this.avatarUrl});
 }
 
 /// Floating pill-shaped bottom nav (mobile only) - a raised circular "+" sits
@@ -107,7 +112,23 @@ class _NavButton extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.all(1.5),
                 decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: selected ? scheme.primary : Colors.transparent, width: 1.6)),
+                // No role ring here - the selection ring this is already
+                // wrapped in (above) made two concentric rings when
+                // selected. The role ring still shows in Perfil/Usuários,
+                // where it isn't competing with a selection indicator.
                 child: UserAvatar(avatarUrl: entry.avatarUrl, name: avatarName, radius: 10),
+              )
+            else if (entry.svgAsset != null)
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                child: SvgPicture.asset(
+                  entry.svgAsset!,
+                  key: ValueKey(selected),
+                  width: 22,
+                  height: 22,
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                ),
               )
             else
               AnimatedSwitcher(
