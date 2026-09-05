@@ -111,6 +111,19 @@ class AppState extends ChangeNotifier {
 
   void bootstrap() {
     _authSub = _client.auth.onAuthStateChange.listen((data) {
+      // onAuthStateChange fires AuthChangeEvent.tokenRefreshed roughly every
+      // hour of active use, on the SAME session/user - nothing about our own
+      // data changed, just the JWT. _handleAuthChange used to re-run for
+      // that too, redoing the whole profile/family/entries/pets/members
+      // fetch (several sequential round-trips) and finishing with a
+      // notifyListeners() that rebuilds the entire tab tree (charts/gauges
+      // included, via IndexedStack keeping every tab alive) - a silent,
+      // unexplained hitch roughly once an hour while just using the app.
+      // Skip it here; currentProfile is still null during the very first
+      // sign-in/session-restore, so that initial load isn't affected.
+      if (data.event == AuthChangeEvent.tokenRefreshed && currentProfile?.id == data.session?.user.id) {
+        return;
+      }
       _handleAuthChange(data.session);
     });
   }
