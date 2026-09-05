@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../models/pet.dart';
 import '../state/app_state.dart';
@@ -99,6 +100,14 @@ class _PetEditSheetState extends State<PetEditSheet> {
   }
 
   String _friendlyError(Object e) {
+    // A PostgrestException (e.g. the "máximo de 3 pets" trigger in
+    // supabase/010_pets.sql firing server-side - reachable if two devices
+    // race past the client-side check above) never stringifies as
+    // "Exception: ...", so it fell through to the generic message below
+    // instead of surfacing its own already-Portuguese, specific reason -
+    // same PostgrestException-first check the rest of the app's error
+    // handlers already use (see settings_screen.dart/admin_users_screen.dart).
+    if (e is PostgrestException) return e.message;
     final msg = e.toString();
     return msg.startsWith('Exception: ') ? msg.substring('Exception: '.length) : 'Não foi possível salvar. Tente novamente.';
   }
