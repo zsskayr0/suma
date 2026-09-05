@@ -41,3 +41,4 @@ Thumbs.db
 # Packaged release artifacts (built locally, uploaded to GitHub Releases,
 # never committed - see the "faça a release" workflow).
 /dist/
+.claude/settings.local.json
