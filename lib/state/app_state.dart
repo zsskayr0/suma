@@ -137,12 +137,26 @@ class AppState extends ChangeNotifier {
     try {
       final row = await _client.from('profiles').select().eq('id', session.user.id).single();
       currentProfile = Profile.fromMap(row, email: session.user.email);
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST116') {
+        // Profile row genuinely missing (shouldn't happen - it's created by
+        // a DB trigger right when the account is created) - bail out to a
+        // clean signed-out state rather than getting stuck.
+        authError = 'Não foi possível carregar seu perfil. Tente entrar novamente.';
+        await _client.auth.signOut();
+      }
+      // Any other Postgrest error here (timeout, temporary connectivity
+      // loss, a request racing a just-refreshed JWT) used to fall into the
+      // same signOut() above - this ran on every silent token refresh
+      // (onAuthStateChange fires AuthChangeEvent.tokenRefreshed too, not
+      // just sign-in/out), so a single transient hiccup an hour into using
+      // the app force-logged the person out for no real reason. Now it just
+      // skips this sync pass and keeps the existing session/profile.
+      return;
     } catch (_) {
-      // Profile row missing (shouldn't happen - it's created by a DB
-      // trigger right when the account is created) - bail out to a clean
-      // signed-out state rather than getting stuck.
-      authError = 'Não foi possível carregar seu perfil. Tente entrar novamente.';
-      await _client.auth.signOut();
+      // Non-Postgrest error (e.g. no network at all) - same reasoning: don't
+      // treat "couldn't reach the server right now" as "sign this device
+      // out."
       return;
     }
 
